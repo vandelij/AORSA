@@ -1,0 +1,1707 @@
+!-----------------------------------------------------------------------
+c ****** namelist inputs for mcgo ******
+c version='mcgo210226.0'    
+c previous version= 'mcgo190131.0', 'mcgo181130.0',
+c                   'mcgo180829.1.BH', 'mcgo180720.0'
+
+**  special_calls="enabled", then code makes system calls to find
+**                name of system and pwd, for output.   This is not
+**                allowed on some systems.
+**               ="external", then files uname_output and pwd_output
+**                are used to printout.  These many be created with
+**                an external script containing
+**                uname -a > uname_output
+**                pwd > pwd_output
+**               ="disabled", then no system calls and no reference
+**                to uname_output and pwd_output files.
+**                This gets around lack of some special functions,
+**                e.g., second(), with some compilers.
+**               default="enabled" 
+
+!----------------------------------------------------------------------
+c code execution mode
+!-----------------------------------------------------------------------
+c iproblm execution mode flag
+!   1, mcgo only, few test particles 
+!      (to check conservation of energy, tor.angular momentum, etc.);
+!   2, mcgo+freya, detailed output from mcgo;
+!   3, mcgo+freya, detailed output from mcgo and freya (common mode);
+!   4, freya only, detailed output
+!      [YuP/comment[2022] As I understand, iproblm=2,3,4 are same now, 
+!       including the output to data files; To be safe, use iproblm=3]
+!   5, Maxwellian loading, no NBI. See subr. set_maxw.
+!       The density and temperature for the Maxwellian loading
+!       are set to match "ibion" species.
+!       Each particle is attributed a weight factor pweight()
+!       as the ratio of physical number of ions of "ibion" sort 
+!       to the code-set number of test particles, see subr.set_maxw :
+!         pweight()= phys_code ! = ptcl_phys_ir/NVtot
+!       where NVtot=NVpar*NVperp  number of code-particles 
+!       at this ir radial index, and
+!       ptcl_phys_ir= eni(ir,ibion)*psivol(ir) 
+!       is the number of physical ptcls at this radial bin.
+!       This factor is used in accumulating physical values like 
+!       density of particles, current, pressure, etc.
+!   6, combined FREYA+Maxwellian loading 
+!     (basically, it is the combination of iproblm=3 and 5)
+!   Note: For Maxwellian group, specify 
+! npart_maxw=
+!   the number of particles representing the initial Maxwellian group.
+!
+!   Optionally, for iproblm=5 or 6, a second group of Maxwellian particles 
+!   can be added, for the same ion species (set by ibion=* in mcgoinput)
+!   to simulate a fast-ion tail.  Specify in mcgoinput:
+! maxwell2='enabled' (Default is 'disabled')
+!   Also specify the density and temperature for the second group with
+! eni2(1:mf)=...(similar to eni() list, but for one species, k=ibion) 
+!               [cm^-3]
+! ti2(1:mf)=...(similar to ti() list) [keV]
+!   Note that ti2 can be much larger than T for the rest of ions (T=ti);
+!   the density eni2 is supposed to be low, to represent particles in tail.
+!   The radial grid for ti2() array is same as rti() grid for ti() array
+!   (no need to set); the radial grid for eni2() is same as rni(1:mf,ibion).
+!   In this setup, the total number of test Maxwellian particles is still 
+!   npart_maxw, but now it is split equally between the 1st and 2nd groups,
+!   and each group will have different weight factors [see subr.set_maxw].
+!   Basically, the two Maxwellian groups are represented 
+!   with {ti1=ti; eni1} and {ti2; eni2}, 
+!   where initially eni1() is set to eni(*,ibion) [see subr.init]
+!   but further eni1 and eni2 are rescaled 
+!   in such a way that eni1+eni2 = eni(*,ibion), 
+!   i.e., equal to the density of species pointed with ibion=* input,
+!   at every radial point [see subr. init, "eni_rescale="].
+!   This option is useful for test purposes, when one wants to simulate
+!   a fast-ion slowing-down distribution from NBI source
+!   with a hot-Maxwellian tail.  YuP[2023-01-17],[2023-01-18]
+!   A simple test for this maxwell2='enabled' option:
+!   set ti2=ti (i.e., same T as the rest of ions),
+!   set ibion=1 and corresponding density table eni(1:mf,ibion), 
+!   set eni2(1:mf) table as a copy of eni(1:mf,ibion), 
+!   i.e., make eni2(1:mf)=eni(1:mf,ibion) [in this case,
+!   the code will rescale eni1() to 0.5*eni(1:mf,ibion),
+!   and eni2() to 0.5*eni(1:mf,ibion), too].
+!   The results are very close to the run with one Maxwellian 
+!   group, when maxwell2='disabled'.
+!   Technically, how rescaling is done [see init.f]:
+!   For each radial index 'i', values of eni(i,ibion) [set in mcgoinput] 
+!   are copied into eni1(i) array.  The rescaling factor is evaluated as
+!     eni_rescale= eni(i,ibion)/(eni1(i)+eni2(i)) [using eni2 from mcgoinput]
+!   Note: if eni2=0, then eni_rescale=1.0 (no need to rescale).
+!   Then, eni1() and eni2() are rescaled as
+!     eni1(i)= eni1(i)*eni_rescale !-> New values for eni1
+!     eni2(i)= eni2(i)*eni_rescale !-> New values for eni2
+!   Note that with this method, the ratio of eni2/eni1 determined
+!   through input values of eni2(*) and eni(*,ibion) remains unchanged. 
+c
+c fionls flag for first orbit ion loss calculation:
+!   .true., calculate first orbits only;
+!   .false., calculation mode disabled.
+c
+c irstrt restart flag:
+!   0, calculate full problem, writing fast ion
+!     distribution into file:POSTP;
+!   1, restart. run mcgo postprocessor sub:POSTP
+!     on distribution obtained from file:POSTP. the
+!     namelist deck with different tangency radii or
+!     energy bin structure (see charge exchange
+!     spectra comments) must still be supplied.
+!     this option causes mcgo to read the namelist,
+!     open the plot files and skip to sub:postproc.
+!-----------------------------------------------------------------------
+      iproblm=max(iproblm,1)
+      fionls=.false.
+      irstrt=0
+!-----------------------------------------------------------------------
+c orbit initial conditions
+!-----------------------------------------------------------------------
+c inits flag indicating source of initial conditions for
+!   execution mode, iproblm=1:
+!   -1, abs(npart) initial conditions are entered
+!     through arrays rinit,znint,phinit,zetinit,enrgyinit
+!     read from binary file INITS;
+!   0, initial conditions obtained from file:MCFR
+!     which has been produced by an earlier run
+!     of freya;
+!   1, abs(npart) identical initial conditions are
+!     specified by rini,pini,zini,zetini,enrgyini, (see
+!     following);
+!   >1, abs(npart)<=20 initial conditions are entered
+!     through rini(1:abs(npart)),zini(),zetini(),enrgyini(),pini(1:abs(npart)), 
+!     **fmass**(see following). [Only applicable when iproblm=1]
+c
+c npart flag indicating number of ion trajectories calculated:
+!   0, one ion is followed, initial conditions are
+!     specified by e0,rb,zc,phi,zetam, detailed
+!     output plots are provided;
+!   >0, npart ion trajectories are calculated. if
+!     iproblm=1, initial conditions are specified
+!     by rini,zini,zetini,enrgyini,pini arrays, otherwise
+!     initial conditions are obtained from freya;
+!     plots for energy deposited to electrons and
+!     ions provided;
+!   <0, abs(npart) ion trajectories are calculated. if
+!     iproblm=1, initial conditions are specified
+!     by rini,zini,zetini,enrgyini,pini arrays, otherwise
+!     initial conditions are obtained from freya;
+!     detailed output plots are provided.
+c
+c initial conditions for single ion (i.e. iproblm=1,
+!   inits=1,npart=0)
+!     zn charge number of ion.
+!     fmass mass of ion (m/mp).
+!        [Now fmass=atw(ibion) is set in subr.init, for any iproblm=***,
+!         and atw(k) is set in init based on selection of namei(k)=***]
+!     e0 initial energy of ion (kev).
+!     zc initial vertical position of ion (m).
+!     rb initial major radial position of ion (m).
+!     phi initial toroidal angular position of ion (degrees).
+!     zetam initial pitch-angle cosine, v(par)/v, of ion.
+c
+c initial condition arrays (dim=20) for the case
+!   iproblm=1, inits>=1, npart>0 or npart<0.
+!     rini() initial major radius (m).
+!     zini() initial vertical position (m).
+!     pini() initial toroidal angle (degrees).
+!     zetini() initial pitch-angle cosine, v(par)/v.
+!     enrgyini() initial energy [keV].  [YuP[03-2018] added]
+!     (if enrgyini is not specified in mcgoinput, 
+!      it will be set to e0 by default) 
+c
+!     ***fmass sets mass of the ion (m/mp)***
+c
+c initskp sample every 'initskip' initial conditions obtained
+!   from freya.
+c
+c ibeam beam energy group from which initial conditions are
+!   sampled from freya, if iproblm=1; otherwise it is
+!   set internally.
+!-----------------------------------------------------------------------
+      inits = 0
+      npart = 0
+      zn = 1.d0
+      fmass = 1.d0
+      e0 = 0.d0
+      rb = 0.d0
+      zc = 0.d0
+      phi = 0.d0
+      zetam = 0.d0
+      initskp = 1
+      ibeam = 1
+!-----------------------------------------------------------------------
+c plasma geometry
+!-----------------------------------------------------------------------
+c qa safety factor on last closed flux surface:
+!   0, two dimensional equilibrium is obtained from
+!     user supplied file:eqdsk.
+!   >0, edge safety factor for circular equilibrium.
+c
+c geometry flux surface geometry:
+!   'onedee  ', circular;
+!   'twodee  ', noncircular;
+c
+c irctr flag specifying source of equilibrium data used by
+!   sub:fluxav:
+!   0, cartesian coordinates defining flux surfaces
+!     are internally calculated;
+!   1, cartesian coordinates defining flux surfaces
+!     are read from file:intfl (produced by prior
+!     execution of sub:fluxav. see comments in
+!     sub:fluxav listing for format of file:intfl.
+c
+c data for circular equilibria
+c rminor minor radius of last closed flux surface.
+c rmajor major radius of last closed flux surface.
+!-----------------------------------------------------------------------
+      qa=0.d0
+      geometry='twodee'
+      irctr=0
+      rminor=66.5
+      rmajor=169.5
+!-----------------------------------------------------------------------
+c axisymmetric e/m fields
+!-----------------------------------------------------------------------
+c bt0 axial toroidal magnetic field, used for generating
+c circular equilibria, (tesla). no default.
+c
+! eqmirror flag for using eqdsk file for mirror machine or toroidal plasma.
+    'disabled', for toroidal geometry,
+    'enabled',  for mirror machine (where R=0 is allowed, and Btor=0)
+c bsgn flag specifying direction of toroidal magnetic field
+!   +1., toroidal component directed in the positive
+!     direction (in the sense of the (r,phi,z)
+!     right-handed system;
+!   -1., toroidal component directed in the negative
+!     direction (in the sense of the (r,phi,z)
+!     right-handed system.
+c
+c csgn flag specifying direction of plasma current
+!   +1., toroidal component directed in the positive
+!     direction (in the sense of the (r,phi,z)
+!     right-handed system;
+!   -1., toroidal component directed in the negative
+!     direction (in the sense of the (r,phi,z)
+!     right-handed system.
+c
+c bpscale factor by which the poloidal magnetic field is
+c multiplied.
+c
+c btscale factor by which the toroidal magnetic field is
+c multiplied.
+c
+c vloop toroidal loop-voltage (volts).
+c
+c phinot central ambipolar potential for calculation of radial
+c electric field (volts).
+c
+c betaeq equilibrium toroidal beta, used for plot labels only.
+c no default.
+c betap equilibrium poloidal beta, used for plot labels only.
+c no default.
+!-----------------------------------------------------------------------
+      eqmirror='disabled' !for mirror machine, set to 'enabled'
+      bsgn=1.
+      csgn=1.
+      bpscale=1.
+      btscale=1.
+      vloop=0.
+      phinot=0.
+!-----------------------------------------------------------------------
+c helical magnetic field perturbations
+!-----------------------------------------------------------------------
+c ianalb flag for analytic b-field calculation in sub:bfielda.
+c must set ianalb=1 for helical perturbations to be
+c calculated:
+!   1, calculate axissymetric and helical
+!     perturbations with analytic b-field model
+!     in sub:bfielda;
+!   else, calculate axissymetric b-field from eqdsk
+!     in sub:bfielda. helical perturbations
+!     are neglected.
+c
+c br0mn array (dim=5) of perturbation radial magnetic field
+c helical modes (tesla).
+c
+c mtheta array (dim=5) of poloidal mode numbers of helical
+c modes.
+c
+c nphi array (dim=5) of toroidal mode numbers of helical
+c modes.
+c
+c phi0 array (dim=5) of toroidal phases of helical modes.
+c
+c srdamn array (dim=5) of normalized radial positions of peaks
+c of helical flux functions.
+c
+c wmn array (dim=5) of normalized widthes of helical flux
+c functions.
+!-----------------------------------------------------------------------
+      ianalb=0
+      br0mn(1)=0.
+      mtheta(1)=2
+      nphi(1)=1
+      srdamn(1)=0.5
+      wmn(1)=0.25
+!-----------------------------------------------------------------------
+c non-axissymetric magnetic fields due to external coils
+!-----------------------------------------------------------------------
+c ripcur array (dim=nwr) specifying currents in straight wire
+!     segments approximating external coils (amps). only
+!   ripcur(1) should be input (currents are equal in all
+!     coil models except for intor hybrid divertor, for
+!     which currents are defined internally). ripcur(1)
+!     acts as a flag:
+!   0, magnetic fields due to external coils not
+!     calculated;
+!   else, magnetic fields due to external coils are
+!     calculated; coil model specified by
+!     namelist variable icoils.
+c
+c icoils flag specifying external coil model:
+!   1, eyeglass-type model;
+!   2, bundle divertor (isx-b) model;
+!   3, toroidal field coil model;
+!   4, bundle divertor (intor) model;
+!   5, intor hybrid divertor model.
+c
+c ieyes number of eyeglass-type external coils.
+c
+c ncoils number of toroidal field coils in tf ripple model.
+!-----------------------------------------------------------------------
+      icoils=3
+      ripcur(1)=0.
+      ieyes=1
+      ncoils=24
+!-----------------------------------------------------------------------
+c vacuum vessel and limiter geometry
+!-----------------------------------------------------------------------
+c rin inner major radius of vacuum vessel at horizontal
+c midplane (cm).
+c
+c rout outer major radius of vacuum vessel at horizontal
+c midplane (cm).
+c
+c axissymetric limiter
+c xlimiter array (dim=maxl) of major radial component of
+!     cartesian coordinates defining limiter (m).
+c ylimiter array (dim=maxl) of vertical position component of
+!     cartesian coordinates defining limiter (m).
+c nlimiter number of cartesian coordinate pairs
+!     (xlimiter(j),ylimiter(j)) defining limiter.
+        !YuP[2018-04] Added: if data was read from eqdsk,
+        !use data on limiter from eqdsk, if available
+        !(otherwise, use arrays as defined in mcgoinput).
+c ylimsh vertical translation applied to limiter points (m).
+c
+c blade limiter (no default)
+c nblade flag and number of cartesian coordinate pairs
+!     (xblade(j),yblade(j)) defining limiter. max=iblade.
+!   0., calculation disabled;
+!   else, calculation enabled;
+!   xblade array (dim=iblade) of major radial component of
+!     cartesian coordinates defining limiter (m).
+!   yblade array (dim=iblade) of vertical position component of
+!     cartesian coordinates defining limiter (m). the
+!     increasing.
+!   philim1,
+!     philim2 toroidal bounds of blade limiter.
+!-----------------------------------------------------------------------
+      rin=101.39
+      rout=237.56
+      nlimiter=62
+      xlimiter( 1) = 0.101600003E+01
+      xlimiter( 2) = 0.101600003E+01
+      xlimiter( 3) = 0.101600003E+01
+      xlimiter( 4) = 0.101600003E+01
+      xlimiter( 5) = 0.115030003E+01
+      xlimiter( 6) = 0.168379998E+01
+      xlimiter( 7) = 0.212820005E+01
+      xlimiter( 8) = 0.224510002E+01
+      xlimiter( 9) = 0.232310009E+01
+      xlimiter(10) = 0.237560010E+01
+      xlimiter(11) = 0.237560010E+01
+      xlimiter(12) = 0.237170005E+01
+      xlimiter(13) = 0.234960008E+01
+      xlimiter(14) = 0.235440016E+01
+      xlimiter(15) = 0.235650015E+01
+      xlimiter(16) = 0.235860014E+01
+      xlimiter(17) = 0.235980010E+01
+      xlimiter(18) = 0.236080003E+01
+      xlimiter(19) = 0.236250019E+01
+      xlimiter(20) = 0.236270022E+01
+      xlimiter(21) = 0.236669993E+01
+      xlimiter(22) = 0.236669993E+01
+      xlimiter(23) = 0.236669993E+01
+      xlimiter(24) = 0.236669993E+01
+      xlimiter(25) = 0.236669993E+01
+      xlimiter(26) = 0.236669993E+01
+      xlimiter(27) = 0.236669993E+01
+      xlimiter(28) = 0.236669993E+01
+      xlimiter(29) = 0.236669993E+01
+      xlimiter(30) = 0.236270022E+01
+      xlimiter(31) = 0.236250019E+01
+      xlimiter(32) = 0.236080003E+01
+      xlimiter(33) = 0.235980010E+01
+      xlimiter(34) = 0.235860014E+01
+      xlimiter(35) = 0.235650015E+01
+      xlimiter(36) = 0.235440016E+01
+      xlimiter(37) = 0.234960008E+01
+      xlimiter(38) = 0.237170005E+01
+      xlimiter(39) = 0.237560010E+01
+      xlimiter(40) = 0.237560010E+01
+      xlimiter(41) = 0.213689995E+01
+      xlimiter(42) = 0.178569996E+01
+      xlimiter(43) = 0.176800001E+01
+      xlimiter(44) = 0.176800001E+01
+      xlimiter(45) = 0.168099999E+01
+      xlimiter(46) = 0.167499995E+01
+      xlimiter(47) = 0.167200005E+01
+      xlimiter(48) = 0.167200005E+01
+      xlimiter(49) = 0.167900002E+01
+      xlimiter(50) = 0.175399995E+01
+      xlimiter(51) = 0.175399995E+01
+      xlimiter(52) = 0.169000006E+01
+      xlimiter(53) = 0.169000006E+01
+      xlimiter(54) = 0.155499995E+01
+      xlimiter(55) = 0.141199994E+01
+      xlimiter(56) = 0.127300000E+01
+      xlimiter(57) = 0.115310001E+01
+      xlimiter(58) = 0.101600003E+01
+      xlimiter(59) = 0.101600003E+01
+      xlimiter(60) = 0.101600003E+01
+      xlimiter(61) = 0.101600003E+01
+      xlimiter(62) = 0.101600003E+01
+      ylimiter( 1) = 0.000000000E+00
+      ylimiter( 2) = 0.400000006E+00
+      ylimiter( 3) = 0.414999992E+00
+      ylimiter( 4) = 0.121730006E+01
+      ylimiter( 5) = 0.135150003E+01
+      ylimiter( 6) = 0.135150003E+01
+      ylimiter( 7) = 0.992600024E+00
+      ylimiter( 8) = 0.708599985E+00
+      ylimiter( 9) = 0.519200027E+00
+      ylimiter(10) = 0.384400010E+00
+      ylimiter(11) = 0.365500003E+00
+      ylimiter(12) = 0.358399987E+00
+      ylimiter(13) = 0.324900001E+00
+      ylimiter(14) = 0.275500000E+00
+      ylimiter(15) = 0.253500015E+00
+      ylimiter(16) = 0.231099993E+00
+      ylimiter(17) = 0.218899995E+00
+      ylimiter(18) = 0.212500006E+00
+      ylimiter(19) = 0.201000005E+00
+      ylimiter(20) = 0.200000003E+00
+      ylimiter(21) = 0.150000006E+00
+      ylimiter(22) = 0.109700002E+00
+      ylimiter(23) = 0.100000001E+00
+      ylimiter(24) = 0.500000007d-01
+      ylimiter(25) = 0.000000000E+00
+      ylimiter(26) =-0.500000007d-01
+      ylimiter(27) =-0.100000001E+00
+      ylimiter(28) =-0.109700002E+00
+      ylimiter(29) =-0.150000006E+00
+      ylimiter(30) =-0.200000003E+00
+      ylimiter(31) =-0.201000005E+00
+      ylimiter(32) =-0.212500006E+00
+      ylimiter(33) =-0.218899995E+00
+      ylimiter(34) =-0.231099993E+00
+      ylimiter(35) =-0.253500015E+00
+      ylimiter(36) =-0.275500000E+00
+      ylimiter(37) =-0.324900001E+00
+      ylimiter(38) =-0.358399987E+00
+      ylimiter(39) =-0.365500003E+00
+      ylimiter(40) =-0.388399988E+00
+      ylimiter(41) =-0.971400023E+00
+      ylimiter(42) =-0.117439997E+01
+      ylimiter(43) =-0.121070004E+01
+      ylimiter(44) =-0.125399995E+01
+      ylimiter(45) =-0.125399995E+01
+      ylimiter(46) =-0.125699997E+01
+      ylimiter(47) =-0.126300001E+01
+      ylimiter(48) =-0.132200003E+01
+      ylimiter(49) =-0.133399999E+01
+      ylimiter(50) =-0.133399999E+01
+      ylimiter(51) =-0.136699998E+01
+      ylimiter(52) =-0.136699998E+01
+      ylimiter(53) =-0.136590004E+01
+      ylimiter(54) =-0.136590004E+01
+      ylimiter(55) =-0.136590004E+01
+      ylimiter(56) =-0.136590004E+01
+      ylimiter(57) =-0.136590004E+01
+      ylimiter(58) =-0.122880006E+01
+      ylimiter(59) =-0.800000012E+00
+      ylimiter(60) =-0.414759994E+00
+      ylimiter(61) =-0.399760008E+00
+      ylimiter(62) = 0.000000000E+00
+      ylimsh=0
+      nblade=0
+!-----------------------------------------------------------------------
+c collision models
+!-----------------------------------------------------------------------
+c timstp time interval between simulation of collisional
+!     effects during orbit integration. Should be much
+!     less than the characteristic bounce time (s).
+!     The purpose is to step along orbit, without collisions or CX
+!     until the accumulated time is equal (or exceeds) timstp.
+!     Can be useful if time step for orbit integration is very small.
+         !From tests [2018-03-07]: Using timstp=3e-6 gives about same
+         !results as timstp=0, maybe just a little better smoothness
+         !in distr.function. But the runs are slower
+         !(5854sec in timstp=3e-6 run vs 4853sec in timstp=0 run).
+         !Seems like using timstp>0 gives no advantage (in CPU time),
+         !at least not in gc_integ='rkthree' runs.
+         Default value is timstp=0.5d-6 (sec). Advised to use 0.d0.
+c
+c icoul flag for model of coulomb collision pitch angle scattering 
+!  and drag/diffusion in energy:
+!   1, model enabled;
+!   else, model disabled;
+!
+!   A more particular control of collisions is done with these flags:
+! icoul1 =0 or =1, flag for model of coulomb collision induced 
+!     speed (energy) diffusion;
+!     By default, icoul1=1, i.e. diffusion in energy is enabled;
+! icoul2 =0 or =1, flag for model of coulomb collision induced 
+!     speed (energy) drag (slowing down);
+!     By default, icoul2=1, i.e. slowing down in energy is enabled;
+!   The meaning/usage of these flags:
+    if(icoul1.eq.0) then there is no +-sqrt() term
+    in the formula for the change in energy, e.g., as in
+    deleni= deion*delt*icoul2 +RNV*icoul1 (test_ion--backgr_ion collision)
+    where RNV= +-sqrt(sigma2_i),
+    so only the first term (drag/slowing down) remains.
+    If icoul2=0, there is no drag term (the first term in the above).
+    Same logic/flags are applied to the energy 
+    change in the test_ion--backgr_e interaction,
+    delene= deelctr*delt*icoul2 +RNV*icoul1
+!   Also - see description for iscats.
+!
+!   Another handle for collision control:
+! fr_vthi_icoul0= (real*8 value), which is a fraction (multiplier)
+    of thermal ion speed vthi above which the energy drag&diffusion
+    in collision operator is disabled, i.e.,
+    if v > fr_vthi_icoul0*vthi  then
+    delene=0.d0 !No change in energy from test_ion--bckgr_e coll.
+    deleni=0.d0 !No change in energy from test_ion--bckgr_ion coll.
+    This is convenient for tests, 
+    or for two-Maxwellian cases [maxwell2='enabled'],
+    to prevent the hot tail (second Maxw. species) 
+    to be slowing down on colder background.
+    Default value is fr_vthi_icoul0=1.d10,
+    meaning that effectively this condition is never triggered.
+    See orbit.f for details.  Added by YuP[2023-04-14]
+!
+c
+c delta2 flag for anomalous scattering model:
+!   0., model disabled;
+!   else, model enabled. e*phi/(k*ti) is the ion
+!     potential energy in the diffusing wave
+!     divided by the average ion thermal energy.
+c
+c ibres flag for fast-ion/fast-neutral resonant charge
+c exchange model:
+!   0, model disabled;
+!   else, model enabled. charge exchange with all
+!     three energy groups of beam-injected
+!     neutrals is included.
+!-----------------------------------------------------------------------
+      timstp=0.5d-6
+      icoul=1
+      icoul1=1
+      delta2=0.d0
+      ibres=0
+!-----------------------------------------------------------------------
+c orbit integration control
+!-----------------------------------------------------------------------
+c gc_integ flag specifying guiding-center equation integration
+c method:
+!   'taylor',
+!     integration by second-order taylor series
+!     of guiding-center equations with analytic
+!     (cylindrical) b-field model;
+!   'rkonedee',
+!     integration by fourth-order runge-kutta
+!     method applied to guiding-center equations
+!     with analytic (cylindrical) b-field model.
+!   'b-stoer',
+!     integration by Burlisch-Stoer method of
+!     general guiding center equations;
+!   'rktwodee',
+!     integration by fifth-order Runge-Kutta
+!     method with adaptive stepsize control
+!     applied to general guiding center equations;
+!   'rkthree'  (Added in 2018-02).
+!     Use subroutines and integration methods implemented
+!     for g.c. orbits in DC and CQL3D-FOW.
+!     The magnetic field and its derivatives are set over
+!     uniform grid (req,zeq) and then, during orbit integration,
+!     the local field and derivatives are interpolated 
+!     by bi-linear interpolation to the particle position.
+!     The time step of integration is set by DTorb in orbit.f.
+!     Presently, it is set as a function of particle speed,
+!     and adjusted automatically to maintain ~50 steps between
+!     each two crossings of the midplane.
+!     Also, for this option, a selection between FOW
+!    (finite-orbit-width) and ZOW (zero-orbit-width) is available:
+c i_orb_width=1 (default, for FOW) or 0 (for ZOW).
+c
+c accurc accuracy parameter (relative error) input to
+c integration routine sub:stepp
+c
+c dti time-step for orbit integration routines. constant
+c for integration by taylor-series and runge-kutta
+c procedures, adjusted subsequent to initial
+c integration by adams-pece procedure.
+c
+c gfactr goosing factor for orbit speedup. typically
+!   gfactr<=0.1. orbit speedup is disabled if
+!   gfactr=0.
+c
+c taufrac control for the artificial time step used in the monte
+c carlo simulation of collisions. The time step for
+c various scatterings (and time-step for integration) is 'goosed' up to
+c deltg=taufrac*min(tslowe,tslowi,tscat,tcx,tanom).
+c Larger values of taufrac yield a significant speedup
+c of computations, but can also produce noisy artifacts.
+c Recommended: taufrac= 1e-4 -- 1e-3.
+c
+c iscats number of monte carlo pitch angle scattering steps per
+c collision simulation. Default is iscats=5.
+!   YuP[2018-02-17] Added additional option: 
+!   Set iscats=0 to skip pitch-angle scattering.
+!   (that is, only perform pitch-angle scattering when iscats>0) 
+c
+c timmax upper limit on trajectory time, after which
+c integration is terminated (s).
+c
+c pin bound on total toroidal angle traversed, beyond which
+c orbit integration is terminated (rad).
+c
+c efrac= fraction of thermal ion energy (Ti) at which fast ion orbit
+c integration is terminated (fast ion becomes thermalized).
+c Note that if efrac<<1, an ion may be spending a lot of time
+c in E~Ti region in vel.space, without reaching the efrac*Ti
+c stopping energy level. Therefore, the runs may become very slow.
+c In this case it is recommended to make test runs with few orbits
+c (iproblm=1 runs), observe the characteristic slowing down time,
+c and set timmax accordingly. The value of timmax will be the most 
+c likely stopping trigger for an ion, in case of efrac<<1.
+c For most applications where NBI is present,
+c it is suggested to set efrac~1.0.
+c Note: This efrac-stopping criteria is only applied for NBI-born 
+c particles (ie=1:3), not for Maxwellian-loaded group (ie=ke+1=4).
+c The Maxwellian group is stopped by t>timmax condition
+c (in runs with iproblm=5 or 6).
+
+c
+c gyro-orbit integration options
+!   timeup time beyond which the lorentz equations are
+!     integrated (s).
+!   phi1 lower bound of toroidal angle within which lorentz
+!     equations are integrated (rad).
+!   phi2 upper bound of toroidal angle within which lorentz
+!     equations are integrated (rad).
+!-----------------------------------------------------------------------
+      gc_integ='rktwodee' ! Better option is 'rkthree'
+      accurc=1.0d-5
+      dti=1.0d-8
+      gfactr=0.d0
+      taufrac=1.0d-3
+      iscats=5
+      timmax=1.d0
+      pin=twopi
+      efrac=1.5
+      timeup=1.0d-5
+      phi1=-0.349
+      phi2=+0.349
+!-----------------------------------------------------------------------
+c plasma profiles
+!-----------------------------------------------------------------------
+c namei character array (dim=kion) defining species of ion:
+!   'h', hydrogen;
+!   'd', deuterium;
+!   'b', boron;
+!   't', tritium;
+!   'he', helium;
+!   'c', carbon;
+!   'o', oxygen;
+!   'si', silicon;
+!   'fe', iron;
+!   'mo', molybdenum;
+!   'w', tungsten.
+c
+c nion number of ion species. max=kion.
+c
+c iprmion index eni(*,iprmion) for density profile of majority
+c ion species. Used to determine the ratio
+c mass primary ion / mass beam ion.
+c This ratio is needed only for calculation of tslowi
+c in sub:orbit.  
+!  YuP/comment: So, the collision operator calculates 
+c interaction of Monte-Carlo test particles 
+c (originally, "ibion" particles, but now - test particles in general)
+c with Maxwellian electrons and Maxwellian majority-ions.
+c Which means that the density of other background ions is supposed 
+c to be much lower than that of "iprmion" species - they are ignored
+c in coll.operator. 
+c 
+c ibion index eni(*,ibion) for density profile of beam ion
+c species. 
+!  YuP: Now, in general, this is a Monte-Carlo test ion species
+c (example: minority-ions in IC minority heating).   
+c
+c icenez flag for density calculation logic:
+!   0, input electron density and z-effective profiles.
+!     calculate ion profiles (using average z
+!     model). two or three ion species allowed.
+!     if nion=3, zfrac is used to determine the
+!     first two (hydrogenic) species.
+!   1, input ion density profiles and calculate
+!     electron density and z-effective profiles.
+! icenez=2 !YuP[2023-04-05] added:
+!     Specify ne and ni for all ions except ibion;
+!     Find ni_ibion from charge neutrality; find Zef.
+!     This is useful for using TORIC data on plasma profiles,
+!     when the density for hot-Maxwellian ions is specified,
+!     while the density for warm(normal)-Maxwellian ions 
+!     is not specified in TORIC data.
+c
+c zfrac= ratio of first two ion species, eni(*,1)/eni(*,2).
+c both species must be hydrogenic. Used only if
+c icenez=0 and nion=3.
+c
+c mf number of grid points, equispaced in delta(rho) upon
+c which profiles are interpolated.
+c
+c two inputs forms are allowed for electron and ion
+c density and temperature profiles:
+!   (1) generalized parabola
+!     xx(j)=xxb+(xxc-xxb)*(1-(r(j)/r(mf))**2)**alpxx
+!   (2) cubic spline fit to data
+!     rxx(j) or radist(j), xx(j)
+c if rxx identically zero, radial knots default
+!     to radist.
+c if input xx are identically zero, generalized
+!     parabolic profiles are determined, otherwise spline
+!     fit procedure is implemented.
+!     the prefixes and suffixes xx represent the various
+!     densities and temperatures.
+c
+c radist array (dim=kf) radial knot points to which input data
+c defaults in the absence of each unique knot array.
+c
+c electron temperature (kev)
+!   alpte parabolic exponent
+!   teb edge electron temperature
+!   tec axial electron temperature
+!   te array (dim=kf) of electron temperature data
+!   rte array (dim=kf) of radial knot points
+c
+c ion temperature (kev)
+!   alpti parabolic exponent
+!   tib edge ion temperature
+!   tic axial ion temperature
+!   ti array (dim=kf) of ion temperature data
+!   rti array (dim=kf) of radial knot points
+c
+c electron density (cm**-3)
+!   alpene parabolic exponent
+!   eneb edge electron density
+!   enec axial electron density
+!   ene array (dim=kf) of electron density data
+!   rne array (dim=kf) of radial knot points
+c
+c ion density (cm**-3)
+c alpeni array (dim=kion) of parabolic exponents
+c enib array (dim=kion) of edge ion density
+c enic array (dim=kion) of axial ion density
+c eni array (dim=(kf,kion)) of ion density data
+c rni array (dim=(kf,kion)) of radial knot points
+c
+c z-effective
+!   alpzef parabolic exponent
+!   zeffb edge z-effective
+!   zeffc axial z-effective
+!   zef array (dim=kf) of z-effective data
+!   rzef array (dim=kf) of radial knot points
+c
+c two inputs forms are allowed for neutral density
+c profiles:
+!   (1) exponential
+!     enn(j)=ennb*exp((r(j)-r(mf))/ennexp)
+!   (2) cubic spline fit to data
+!     rnn(j) or radist(j), enn(j)
+!   if rnn identically zero, radial knots default
+!     to radist.
+!   if input enn are identically zero, exponential
+!     profiles are determined, otherwise spline fit
+!     procedure is implemented.
+!   ennb edge neutral density (cm**-3).
+!   ennexp exponential decay length of neutral density profile
+!     (cm**-3).
+!   enn array (dim=kf) of neutral density data (cm**-3).
+!   rnn array (dim=kf) of normalized radial knot points.
+!   torrls neutral recycling rate. used as a multiplying factor
+!     on the neutral density profile (torr-liters/sec).
+!   ehneut flag for model of enhanced neutral density localized
+!     at blade limiter:
+!   0, model disabled;
+!   1, model enabled.
+c
+c scrape-off plasma quantities
+!   teb1 electron temperature in scrape-off region (kev).
+!   tib1 ion temperature in scrape-off region (kev).
+!   eneb1 electron density in scrape-off region (cm**-3).
+!   enib1 array (dim=kion) of ion density in scrape-off region
+!     (cm**-3).
+!   ennb1 neutral density in scrape-off region (cm**-3).
+!   zeffb1 z-effective in scrape-off region.
+!-----------------------------------------------------------------------
+      namei(1)='h'
+      nion=1
+      iprmion=1
+      ibion=1
+      icenez=1
+      zfrac=1.d0
+      mf=21
+      call bcast(radist,0.d0,kf)
+      alpte=2.0
+      teb=0.05
+      tec=6.0
+      call bcast(te,0.d0,kf)
+      call bcast(rte,0.d0,kf)
+      alpti=1.d0
+      tib=0.05
+      tic=1.d0
+      call bcast(ti,0.d0,kf)
+      call bcast(rti,0.d0,kf)
+      alpene=1.d0
+      eneb=1.d12
+      enec=1.d14
+      call bcast(ene,0.d0,kf)
+      call bcast(rne,0.d0,kf)
+      alpeni(1)=1.d0
+      enib(1)=1.d12
+      enic(1)=1.d14
+      call bcast2(eni,0.d0,kf,kion,kf)
+      call bcast2(rni,0.d0,kf,kion,kf)
+      alpzef=1.
+      zeffb=1.
+      zeffc=1.d0
+      call bcast(zef,0.d0,kf)
+      call bcast(rzef,0.d0,kf)
+      ennb=1.d10
+      ennexp=7.d0
+      call bcast(enn,0.d0,kf)
+      call bcast(rnn,0.d0,kf)
+      torrls=0.d0
+      ehneut=0.d0
+      teb1=0.020
+      tib1=0.005
+      eneb1=3.d10
+      enib1(1)=1.d10
+      ennb1=1.d10
+      zeffb1=1.d0
+!-----------------------------------------------------------------------
+c poloidal fast ion density and electric field
+!-----------------------------------------------------------------------
+c izone array (dim=maxzone) serving as both calculation flag
+!     and specification of radial width of poloidal bins:
+!     the first element, izone(1), serves as a flag in the
+!     following manner:
+!   0, calculation disabled;
+!   1, calculation enabled.
+!   izone specifies the radial structure in the
+!     following manner. given an array rho(j), j=1,mf-1,
+!     delimiting nested flux zones, the jth set of
+!     poloidal bins are radially delimited by (k,l) given
+!     by,
+!     k=sum(m=1,j-1)izone(m)
+!     l=izone(j)+k
+!     so that rho(k),rho(l) are radial bounds on the jth
+!     set of poloidal bins. Lower bound on first zone is
+!     the magnetic axis. Radial zones need not extend to
+!     the last closed flux surface (i.e. rho(mf-1)), but
+!     izone(j), 1<j<=lastzone, must be non-zero.
+c
+c npolbin number of equi-spaced poloidal bins.
+c npolbin<=maxpold.
+!-----------------------------------------------------------------------
+      izone(1)=0
+      npolbin=10
+!-----------------------------------------------------------------------
+c fast ion flux in poloidal-toroidal-radial box
+!-----------------------------------------------------------------------
+c ifcx flag for calculation of fast ion flux in localized
+c poloidal-toroidal-radial box:
+!   0, calculation disabled;
+!   1, calculation enabled.
+c
+!   rtf1,rtf2 radial lower,upper bounds of box, (m). no default.
+c
+!   ztf1,ztf2 vertical lower,upper bounds of box, (m).
+!     no default.
+c
+!   phitf1,
+!     phitf2 toroidal lower,upper bounds of box, (rad).
+!     no default.
+!-----------------------------------------------------------------------
+      ifcx=0
+!-----------------------------------------------------------------------
+c wall loading calculations
+!-----------------------------------------------------------------------
+c arclim array (dim=klbins+1) specifying bin bounds in
+c arclength, from inboard midplane, clockwise. ion
+c and neutral impact are binned for energy flux
+c calculations. calculation enabled if geometry=
+c 'twodee'.
+!   if arclim(2)=0., bins are equispaced in arclength.
+c
+c nlbins number of poloidally localized bins used in wall
+!     loading calculation. nlbins<=klbins.
+c
+c iscrpof flag specifying inclusion of finite-gyroradius effect
+!     on energy flux to axissymetric limiter:
+!   0, finite-gyroradius effect neglected;
+!   1, finite-gyroradius effect enabled. at each
+!     equatorial crossing, gyro-orbit intersection
+!     with limiter is checked.
+!-----------------------------------------------------------------------
+      arclim(2)=0.
+      nlbins=72
+      iscrpof=0
+!-----------------------------------------------------------------------
+c charge exchange spectrum
+!-----------------------------------------------------------------------
+c icxmode flag for mode of charge exchange analysis
+!   'active', code is run as a postprocessor with
+!     fast ion distribution contained in
+!     file:POSTP. if beam-neutral
+!     deposition file:BEAMDEP is absent,
+!     call to neutral beam package is
+!     enabled, otherwise the call is
+!     disabled. this can facilitate
+!     comparison of charge exchange spectra
+!     during neutral beam modulation.
+!   'passive', code is run according to namelist
+!     variable:irstrt, and charge exchange
+!     spectra due to collisions with
+!     background neutrals are calculated.
+!   'disabled', charge exchange spectra calculations
+!     are disabled.
+c
+c rtan array (dim=ntanmax) of tangency radii for sight lines
+c (cm). if rtan(j) is grader than the outboard major
+c radius of the last closed flux surface, calculation
+c for that sight line is omitted. specify rtan
+c positive/negative for co/counter sight lines.
+c
+c nrtan number of sight lines specified by the rtan array.
+c nrtan<=ntanmax.
+c
+c edistb array (dim=nemax) of bounds defining charge exchange
+c energy bin structure (kev).
+c
+c negrps number of bin bounds for charge exchange energy
+c spectra:
+!   0, defaults in sub:postproc to negrps=nemax
+!     and edistb(j), j=1,nemax, bin bounds,
+!     equispaced between 0.5 and 1.1*e0 kev
+!     are specified;
+!   else, edistb(j), j=1,negrps, specify the charge
+!     exchange energy bin bounds.
+c
+c nradbin number of radial bins, equispaced on the equatorial
+c plane from the inner plasma radius to the outer
+c plasma radius. corresponding arrays for densities
+c and temperatures are determined and used in
+c calculation of charge exchange and ionization
+c rates along sight lines. nradbin<=iradc.
+c
+c phicxa toroidal angular displacement of neutral beam port
+c center from charge exchange analyzer, (rad).
+!   -pi<phicxa<=pi, where the sign is defined in the
+!     right-handed (rmaj,phi,z) coordinate system. used
+!     only for active charge exchange calculations,
+!     icxmode='active'.
+c
+c arcbin maximum arclength (cm) of a radially-centered arc in
+c the radial-toroidal bins used for the beam-neutral
+c deposition arrays. error exit executed if number of
+c toroidal bins exceeds dimensions.
+c
+c npass number of smoothing passes made over equatorial plane
+c velocity distribution representation.
+c
+!  YuP[2018-01-30] added to namelist:
+!      emin=  ! Lower energy limit for energy grid [keV]
+!      emax=  ! Upper energy limit for energy grid [keV]
+c recommended to set it higher than the NBI largest energy, e.g. 1.05*e0
+c These values are used to setup an energy grid for plots of 2D distr.func.
+c See postproc.f
+c
+!-----------------------------------------------------------------------
+      icxmode='disabled'
+      rtan(1)=1.e5
+      nrtan=1
+      negrps=0
+      nradbin=iradc ! number of radial bin centers
+      phicxa=-pi/4.
+      arcbin=6.0
+      npass=0
+      ! YuP[2018-01-30] now in namelist:
+      emin= 0.5    ! Lower energy limit for energy grid [keV]
+      emax=73.5    ! Upper energy limit for energy grid [keV]
+      !recommended to set it higher than the NBI largest energy, e.g. 1.05*e0
+      
+!-----------------------------------------------------------------------
+c toroidal precession spectrum
+!-----------------------------------------------------------------------
+c precmode flag for output of toroidal precession frequency
+c spectrum.
+!   'enabled', output to binary file:PRECFIL is
+!     enabled. code:precess plots
+!     spectrum over a user-defined domain
+!     and calculates the average toroidal
+!     precession frequency.
+!   'disabled', output is disabled.
+!-----------------------------------------------------------------------
+      precmode='disabled'
+!-----------------------------------------------------------------------
+c output plotting control
+!-----------------------------------------------------------------------
+c iplot flag for plotting single ion trajectories
+c (i.e. npart<=0):
+!   0, plot trajectories in poloidal cross-section
+!     and top view only;
+!   else, provide detailed trajectory output.
+c
+c ismooth flag for smoothing of plots of energy to electrons and
+c ions:
+!   0, smoothing disabled;
+!   1, smoothing enabled.
+c
+c isampl integration step interval at which solution data is
+c stored.
+c
+c !YuP[2018-01-29] Added:
+c intsave !Interval for saving of time-dep. values
+      ! like energy(itime), etc. Those variables are dimensioned as
+      ! (maxplot), set in param.i.
+      ! It is recommended to keep maxplot==nptsplt, 
+      ! and intsave==intorbsave
+c intorbsave !Interval for saving of (rorbit,zorbit) along orbits,
+      ! so totally nptsplt time points are saved, 
+      ! each intorbsave step of integration.
+      ! If the value of accurc is set to be very small
+      !  (runs with high accuracy)
+      ! then the time step of integration is also small,
+      ! then it is better to increase intsave and intorbsave.
+
+c flim upper fraction of vertical extent of limiter to be
+c plotted. note, limiter is not plotted for circular
+c equidisk files (file:eqcirc), thus this has no
+c effect. 0.<=flim<=1.
+!-----------------------------------------------------------------------
+      iplot=1
+      ismooth=0
+      isampl=1
+      intsave=1
+      intorbsave=1      
+      flim=1.d0
+!-----------------------------------------------------------------------
+c input for freya
+!-----------------------------------------------------------------------
+c ranseed randomization control
+!   0, randomization enabled;
+!   else, randomization disabled;
+c
+c rantest randomization test:
+!   .true., randomization testing enabled;
+!   .false., randomization testing disabled;
+c
+c npartin number of particles followed into plasma.
+c
+c npskip ratio of number of initial conditions of trajectories
+c to number of initial conditions generated at source
+c plate.
+c
+c rbright,
+c rbleft upper and lower major radial bounds within which
+c ionized beam-neutral initial conditions are accepted
+c for selection by sub:orbit, (cm). default are
+c radial bounds determined by sub:fluxav.
+c
+c iborb flag for modeling orbit effects on beam-generated fast
+c ions:
+!   0, orbit model disabled;
+!   1, orbit model enabled.
+c
+c iexcit flag for model of multistep ionization processes:
+!   0, multistep ionization model disabled;
+!   1, enable sub:hexnb, but disable multistep
+!     ionization model therein;
+!   2, multistep ionization model enabled;
+!   5, use JET Atomic Data and Analysis Structure (ADAS) package
+!      (see detailes below)
+c
+c mb number of neutral beam injectors. mb = 1 or 2.
+c
+c nsourc number of sources per beamline. in each case, the
+c exit grid plane is normal to the beamline axis, and
+c contains the source exit grid center(s):
+!   1, source is centered on beamline axis;
+!   2, distinguish between beamline axis and source
+!     centerline (optical axis). the two sources
+!     are assumed to be mirror images through the
+!     beamline axis. the alignment of the sources
+!     with respect to the beamline axis is
+!     specified by var:bhofset, var:bvofset, and
+!   var:bleni (described subsequently).
+c
+c naptr total number of aperatures encountered by a particle
+c as it moves from the source into the plasma chamber.
+c naptr<=kap. first set of aperatures encountered by
+c the particle are assumed centered on the source
+c axis, and subsequent aperatures are centered on the
+c beamline axis. distinctions of aperature geometry
+c are made by var:ashape.
+c
+c anglev array (dim=kb). vertical angle (degrees) between
+c optical axis and horizontal plane corresponding
+c to each injector. a positive value indicates
+c particles move upward.
+c
+c angleh array (dim=kb). horizontal angle (degrees) between
+!     optical axis and vertical plane corresponding to
+!     each injector.
+c angleh array (dim=kb). horizontal angle (degrees) between
+!     optical axis and vertical plane passing through
+!     pivot point and toroidal axis. correspond to each
+!     injector. a zero value denoted perpendicular
+!     injection, while a positive value indicates that
+!     particles move in a co-current direction.
+c
+c bvofset array (dim=kb). vertical offset from beamline axis to
+c center of each source (cm). correspond to each
+c injector. used only for nsourc=2.
+c
+c bhofset array (dim=kb). horizontal offset from beamline axis
+!     to center of each source (cm). correspond to each
+!     injector. used only for nsourc=2.
+!    
+c bleni array (dim=kb). length along source centerline
+!     (source optical axis) from source to intersection
+!     point with the beamline axis (cm). correspond to
+!     each injector. used only for nsourc=2.
+c
+c sfrac1 array (dim=kb). fraction of source flux emitted from
+!     source plate with position specified by bhofset and
+!     bvofset. 1-sfrac is the fraction from its mirror
+!     image. correspond to each injector.
+c
+c bcur array (dim=kb). total current (amps) in ion beam
+!     (used only if var:bptor=0). correspond to each
+!     injector.
+c
+c bptor array (dim=kb). total power (watts) through aperature
+!     into torus. when nonzero, bptor takes precedence
+!     over var:bcur. correspond to each injector.
+c
+c bshape array (dim=kb). beam shape. correspond to each
+!     injector.
+!   'circ    ', circular;
+!   'rect    ', rectangular;
+!   'rect-lps', rectangular, long-pulse source. a
+!     choice of short and long pulse
+!     sources is available by injector
+!     (not by source). one or both
+!     injectors may be long pulse by
+!     setting one or both to 'rect-lps'.
+c
+c bheigh array (dim=kb). height of source (cm). correspond to
+!     each injector.
+c
+c bwidth array (dim=kb). width of source (cm). correspond to
+!     each injector.
+c
+c bhfoc array (dim=kb). horizontal focal length of source
+!     (cm). correspond to each injector.
+c
+c bvfoc array (dim=kb). vertical focal length of source (cm).
+!     correspond to each injector.
+c
+c bhdiv array (dim=kb). horizontal divergence of source
+!     (degrees). correspond to each injector.
+c
+c bvdiv array (dim=kb). vertical divergence of source
+!     (degrees). correspond to each injector.
+c
+c ebkev array (dim=kb). maximum particle energy in source
+!     (kev). correspond to each injector.
+c
+c fbcur array (dim=(ke,kb)). fraction of current at energy
+!     ebkev/ie. correspond to each injector.
+c
+c ashape array (dim=(kap,kb)). aperature shape.
+!   prefix 's-' denotes source axis centered.
+!   prefix 'b-' denotes beamline axis centered.
+!   's-circ'
+!   'b-circ', circular aperature;
+!   's-rect'
+!   'b-rect', rectangular aperature;
+!   's-vert'
+!   'b-vert', limits vertical extent of beam;
+!   's-horiz'
+!   'b-horiz', limits horizontal extent of beam;
+!   'b-d3d', special diii-d polygonal aperature.
+c
+c aheigh array (dim=(kap,kb)). height of aperature (cm).
+!     correspond to each injector.
+c
+c awidth array (dim=(kap,kb)). width of aperature (cm).
+!     correspond to each injector.
+c
+c alen array (dim=(kap,kb)). length from source to aperature
+!     for source axis centered aperatures, and from exit
+!     grid plane along beamline axis for beamline centered
+!     aperatures (cm). correspond to each injector.
+c
+c blenp array (dim=kb). distance along beamline axis from
+!     source exit plane to the fiducial 'pivot' point
+!     (cm). correspond to each injector.
+c
+c rpivot array (dim=kb). radial position of pivot point (cm).
+!     correspond to each injector.
+c
+c zpivot array (dim=kb). axial position of pivot point (cm).
+!     correspond to each injector.
+c
+** For iexcit=5 (JET Atomic Data and Analysis Structure (ADAS) package)
+**                  Plasma ions are assumed to be fully stripped. Beam stopping 
+**                  cross sections are returned in the array, sgxn, for each 
+**                  beam and beam energy component, and flux zone. 
+**                  NOTE: ascii cross section files are located 
+**                        in the subdirectory ./data/adas/
+**                        Can create a link in the working directory to a
+**                        given location of the data/adas files.
+**                  In iexcit=5 cases, set the following additional variables:
+**                  (These are hard-wired for now, see sub.freya)
+**                  fe_tk=factor (>1) to set upper limit of energy in 
+**                     n*sigma array.  max(ebins) = max(ebkev)*fe_tk.
+**                     Required for nonzero rotation cases.
+**                  ne_tk= number of equi-width energy bins used in forming
+**                     n*sigma array.  Required for nonzero rotation cases. It is
+**                     internally reset to zero (used as flag to turn off 
+**                     rotational effects on neutral stopping) if angular 
+**                     rotation is not present (iangrot = 0).
+**                  ds_tk= maximum trajectory increment (cm) used in subroutine
+**                     INJECT1 to calculate psi(s), where s is the neutral 
+**                     trajectory pathlength from the first closed flux surface
+**                     it encounters.  Used for non-zero toroidal rotation,
+**                     where mean free path as a function of path length
+**                     is required.
+**  inubpat         Not used in MCGO.
+**                  Switch controlling 2-d beam deposition calculation -
+**                  0, (default) bypass 2-d deposition. 
+**                  (0 in CQL3D runs)
+
+!YuP[2022-11-02] Added, for NUBEAM interface (adapted from CQL3D).
+**  Instead of using FREYA modules, read-in birth points from data files
+**  produced by NUBEAM.
+**  read_birth_pts="enabled", then read a set of birth point files
+**         from NUBEAM (or similar format from other codes),
+**         to compare with results from freya calculation [BH130401].
+**         Beam geometry, as above will not be used.
+**         [Needs checking: Each subsequent call to freya will use the next file
+**         in a sequence, coordinated in time to the MCGO run.]
+**         A single beam is assumed, with up to three beam energy 
+**         components (ie=1:3).
+**         [Make sure fr_gyro="disabled"; usually the shift to g.c. 
+**          is already done in NUBEAM data. See below.]
+**         Default: "disabled"
+**  nbirth_pts_files=number of birth point files, default=1 (max=24, for now).
+**  birth_pts_files=input nbirth_pts_file filenames into
+**                 the namelist, in the order which they
+**                 will be used in MCGO. character*128.
+**                 Max list length=24.  default='notset'
+**  nbirth_pts= should be same as in all the NUBEAM files. default=250000
+**          The shine through, and total power is read from the files.
+**          nbirth_pts is checked [see if(nbirth_pts_nub .ne. nbirth_pts)...
+**          in subr. read_nubeam_data]
+**          Power and shine through numbers may vary from file to file.
+**          Note: in mcgoinput, set npartin=nbirth_pts, 
+**          while npart can be lower than nbirth_pts.
+**
+**  fr_gyro="enabled" gives gyro-radius offset of calculated NBI
+**          birth points, to the guiding center position birth point.
+**          Meant to be used in case of FREYA deposition.
+**          Should be disabled, in case this offset already included for
+**          read_birth_pts="enabled", for example, from NUBEAM.
+**          default = "disabled".
+** 
+**
+**
+**  NEW FEATURE FOR NBI-born particles [added in 2022-08]:
+**
+**  reinject_nbi= (Default: 'disabled')
+**    If 'enabled', the particles in ie groups ie=1:3 are reinjected
+**    after certain time period (see namelist variable reinject_tau)
+**    back to the NBI-birth energy (which is different for each ie group).
+      This option can be used in runs where NBI group (ie=1:3) is present,
+      i.e., (iproblm.eq.2).or.(iproblm.eq.3).or.(iproblm.eq.4).or.(iproblm.eq.6).
+      In this case the weight factor of particle is different from 
+      the original case (reinject_nbi='disabled') by carrying the 
+      weight factor (Phys.ptcls/code.ptcls) 
+      similar to that of the Maxwellian group (ie=4).
+      For details, see orbit.f.
+      For example, the distribution function is formed with weight factor
+      "pwfactor", which originally (reinject_nbi='disabled')  was
+          pwfactor=anormal(ie) !for NBI; (three groups ie=1:3)
+      but for reinject_nbi='enabled' it becomes
+          pwfactor=anormal(ie)*reinject_tau /(tim_fdist_2-tim_fdist_1)
+      where (tim_fdist_2-tim_fdist_1) is the time range over which 
+      the distribution is accumulated (collected at the midplane).
+      Note that anormal(ie)=bneut(ie,1)/nparts_ie !(phys_ptcls/code_ptcls)/sec
+      and bneut(ie,ib) = intensity of neutral beam (particles/s).
+      [Compare the above pwfactor to weight factor for Maxwellian group, 
+       pwfactor= pweight/(tim_fdist_2-tim_fdist_1)
+       where pweight=(Number of Phys.ptcls)/(Number of code.ptcls) ]
+      
+    reinject_tau=  (Default is reinject_tau=100.d-3 ![sec])  
+      Time period after which a particle (test ion) is reinjected back
+      to the original energy.
+      It is recommended to have reinject_tau to be larger than
+      the slowing down time for the fastest ions (which are in ie=1 group),
+      otherwise the thermalized part of the distribution 
+      will not be formed. If reinject_tau is too large, 
+      the thermalized part will become very pronounced ("ash" accumulation).
+      For most applications, the thermalized part of the distribution
+      is of no importance. 
+      Also it is advised to set ending time timmax > reinject_tau 
+      (or better timmax > 2*reinject_tau). 
+      If the ending time timmax is smaller than reinject_tau,
+      a warning message is printed.
+      Similarly, it is recommended to have tim_fdist_1 > reinject_tau,
+      i.e., the accumulation of the distribution function
+      should start after t > reinject_tau.
+      The reason for this is that each test particle (in each ie group)
+      is started with some delay, see orbit.f,  
+        tstart=(nparts-1)*dtau_inject
+      where nparts is the particle index in ie-group [nparts=1,ipcount(ie)], and 
+        dtau_inject= reinject_tau/ipcount(ie) !Time delay.
+      This scheme is made for the purpose of a steady turn-around
+      of particles after t>reinject_tau.
+      The power of NBI is gradually increasing
+      within the initial t<reinject_tau, when particles are added
+      to the system but there is no "supply" from reinjection yet.
+      The steady state is achieved after t>reinject_tau,
+      so it is recommneded to skip that initial time range.
+      
+ 
+!-----------------------------------------------------------------------
+      ranseed=0
+      rantest=.false.
+      npartin=10000
+      npskip=1
+      iborb=0
+      iexcit=0
+      mb=1
+      nsourc=2
+      naptr=4
+      do i=1,kb
+        anglev(i) = 0.d0
+        angleh(i) = 19.5
+        bvofset(i) = 0.d0
+        bhofset(i) = 42.074
+        bleni(i) = 556.808
+        bcur(i) = 110.d0
+        bptor(i) = 10.d6
+        bshape(i) = 'rect-lps'
+        bheigh(i) = 48.
+        bwidth(i) = 12.
+        bhdiv(i) = .50
+        bvdiv(i) = 1.3
+        fbcur(1,i) = 0.7
+        fbcur(2,i) = 0.2
+        fbcur(3,i) = 0.1
+        bhfoc(i) = kbig
+        bvfoc(i) = 1.e3
+        ebkev(i) = 0.d0
+        sfrac1(i) = 0.5
+        ashape(1,i) = 's-rect'
+        ashape(2,i) = 's-rect'
+        ashape(3,i) = 'b-d3d'
+        ashape(4,i) = 'b-circ'
+        aheigh(1,i) = 47.8
+        awidth(1,i) = 13.8
+        alen(1,i) = 186.1
+        aheigh(2,i) = 48.0
+        awidth(2,i) = 17.7
+        alen(2,i) = 346.0
+        alen(3,i) = 449.0
+        awidth(4,i) = 50.9
+        alen(4,i) = 500.
+        blenp(i) = 539.
+        rpivot(i) = 286.6
+        zpivot(i) = 0.d0
+      enddo
+!-----------------------------------------------------------------------
+c defunct namelist variables
+!-----------------------------------------------------------------------
+c ddtin,icntour,iedens,ietemp,iidens,iitemp,indens,iradind,izeff,
+c radmax
+!----------------------------------------------------------------------
+
+   New diagnostics feature [2018] - 
+   forming of the  distr.function 
+   over a time window,  time=[tim_fdist_1; tim_fdist_2].
+   This can be important in runs where the steady-state 
+   distribution is not achieved, for example, ICRH heating.
+   Set in mcgoinput the values of
+      tim_fdist_1=   beginning of time window
+      tim_fdist_2=   end of time window
+   Default values are 0.d0 and 0.d0.
+   The code will check: if tim_fdist_2 is not set in mcgoinput,
+   i.e. it remains 0.d0 from the default value, the code will set 
+   tim_fdist_2 to timmax, so the time window becomes [0; timmax]
+   for the Maxwellian group, as it was before this feature was added.
+   This feature only works for the ie=4 group (Maxwellian group).
+   It is recommended to use it in runs 
+   with only-Maxwellian group (iproblm=5),
+   but not in mixed NBI+Maxwellian runs (iproblm=6).
+
+   Also, a similar diagnostics feature, but with many time frames -
+   use the series of time frames 
+   for collecting/accumulating profiles  
+   [such as curdens(rho)] from particles.
+   The formation of profiles is based on time spent by particle
+   in each radial (rho) bin, and collecting the changes in energy,
+   or Vperp^2, or Vpar, etc, that occured during such time.
+   Normally, there is just one time frame, the whole range [0:timmax],
+   that is used for collecting the data,
+   but now it could be divided into equally-sized
+   smaller frames [0:dtw],[dtw:2*dtw],[2*dtw:3*dtw]...
+   where dtw= timmax/ntw (set ntw in namelist; .le.ntwa).
+   The start and end of each time frame are set in subr.init,
+   see tw_start(itw)=(itw-1)*dtw, and
+   tw_end(itw)=  itw*dtw,     where itw=1:ntw.
+      ntw=1 is the default value (which sets one frame 0:timmax).
+   Set the value of ntw in mcgoinput.
+   It should not exceed ntwa, which is set in param.i.
+   It is recommended to set ntw to a reasonably small value -
+   so that each time frame is sufficiently large
+   for statistical purpose. 
+   The plots of profiles at different time frames are color-coded,
+   and accompanied by a list of labels 
+   (Example:  P=3.5x10^5 W, at t=4x10^-2 s);
+   the specified time "t" in a label corresponds 
+   to the ending time of a time frame 
+   (so, the t value of beginning of the time frame is omitted).
+   YuP[2019-01] 
+   [This feature could be extended to the formation of distr.function
+    but would require too much memory 
+    and would make the ps files with plots too big, 
+    so - only one time window for the distr.function, for now]
+   
+
+   A handle for time-step control [added in 2018-11-30],
+   used in gc_integ='rkthree' integration method.
+      dtorbv_fact=0.5 !see DTorbv= dtorbv_fact*rplasma*0.01/max(v,vthi)
+   !In[2018-10-24]for NSTX runs, effectively it was dtorbv_fact=0.25,
+   !But for DIIID original runs, dtorbv_fact=0.5 looks good enough.
+   !(smaller value is better for accuracy, but results in longer runs)
+   
+
+c RF operator. Default namelist variables with explanations.
+
+      RF_data_source='none' ! No RF by default
+      
+c To use RF, specify      
+!-----------------------------------------------------------------------
+!     Namelist values for RF operator.    YuP[2018]
+!     (Mostly same names as in DC namelist, and additional iRFver)
+      ! Choose AORSA or Toric RF data:
+      RF_data_source='toric'               !Read from file toric_data_reg_grid.dat 
+      RF_data_source='aorsa_single_nphi'   !Read from file aorsa_flds_xyz.dat
+      RF_data_source='aorsa_multiple_nphi' !Read from file aorsa_flds_xyz.dat
+                                           !and aorsa_flds_weights.dat
+      RF_data_source='toric2'  Read from file toric_data_rf.dat -      
+                               The data file includes values of Eplus, Eminus
+                               and Kperp over (R,Z) plane, for one tor.mode Nphi.
+                               Specify fant, RF_pwr_scale, and n_phi (see below).                      
+                                            
+
+      [RF_Epar_to_zero='disabled'] !Not functional.
+      !This option is reserved for future use: 'enabled' to set Epar to 0. 
+      !Can only be used for a complete set of RF el.field (Ex,Ey,Ez)
+
+
+      ! Method for calculating the change in (Vperp,Vpar) caused by RF.
+      iRFver=3 ! presently three versions:  1,2,3.
+      !         Ver. 1 and 2 are based on a simplifed Stix model
+      !         using only Eplus and Eminus rf components.
+      !         The change in Vperp is calculated from
+      !         phase integral (search for SIdt) .
+      !         See Nucl.Fus. 15, (1975), equations at p.741.
+      !         The integral corresponds to (numerical) solution 
+      !         of equation for Vperp (as Vx+i*Vy rotating vector)
+      !         in given fields Eplus=(Ex+i*Ey)/2 and Eminus.
+      !         Version 3 is based on QL diffusion coefficients
+      !         and random numbers.
+        !iRFver=1 calculates Integral SIdt at EVERY step of the orbit,
+        ! and includes the Eplus and Eminus RF field.
+        ! It has a limitation on time step, because the integral
+        ! has a quickly-oscillating kernel ~exp(i*omega_rf - i*Omega_c).
+        ! With a large step of integration, 
+        ! the effects of under-sampling become significant,
+        ! which may cause an energy upward trend
+        ! for orbits that do not cross the ICR layer (physically, 
+        ! for such particles the energy is expected to "oscillate"  
+        ! along orbit around initial value energy(t=0)).
+        ! An effectively small step for computation of SIdt 
+        ! can be achieved by using a large number of sub-steps
+        ! [see below: nsub= Number of sub-steps within DTorb].
+        ! This way, the orbit-integration step DTorb can be large,
+        ! while it is divided into nsub substeps where SIdt
+        ! is evaluated. 
+        ! Still, this version is ~10x slower than iRFver=3.
+        ! The advantage is that iRFver=1 is a first-principle approach,
+        ! based on direct calculation of wave-particle dynamics.
+        !
+        !iRFver=2 calculates Integral SIdt only at the crossing of 
+        ! ICR layer, assuming that particle approaches the layer 
+        ! from t=-INF, and then travels past it for t=+INF.
+        ! It is based on Stix paper NF15_737_1975, p.741,
+        ! the analytical representation of the integral
+        ! using expansion of cyclotron frequency Omega_c(t)
+        ! near each resonance.
+        ! The contribution from RF is simply 
+        !   U= (Q/m)*Eplus*sqrt(2*pi*i/Omega_c')
+        ! where Omega_c' == d(Omega_c)/dt  (== omegac_dot here).
+        ! The value of sqrt(2*pi*i/Omega_c') comes from integral
+        ! Intgrl{ exp[i*(omegac_dot/2)*(t-tc)^2] dt }
+        ! (where tc is the instant of ICR crossing)
+        ! evaluated in range t=[-INF;+INF]
+        ! Actually, the value of sqrt(2*pi*i/omegac_dot) 
+        ! is approximately obtained within the range 
+        ! t= [-sqrt(8/omegac_dot); +sqrt(8/omegac_dot)],
+        ! the rest of the range gives oscillations around the 
+        ! "target magnitude" |sqrt(2*pi*i/omegac_dot)|
+        ! with gradually reducing amplitude of "swings".
+        ! This version has a CPU speed-up advantage - 
+        ! not only because of possibility of large DTorb,
+        ! but also because the RF field is evaluated at 
+        ! ICR crossings ONLY, i.e. 2-4 times per one poloidal transit.
+        ! One problem with this version is the phase of the "kick".
+        ! In Stix paper, it is assumed to be randomized 
+        ! with respect to Vprp(t=-inf). In the code, it is not.
+        ! The new (after RF kick) value is found as
+        !   vprp_afterRF = (vprp_beforeRF + U)/exp[i*omegac*dt]
+        ! where vprp_beforeRF contains the cumulative gyro-phase 
+        ! exponent factor, and U (==SIdt_step below) 
+        ! contains exp(-i*omega_rf*t), also 
+        ! exp(iNphi*phi), and also the phase from sqrt(i).
+        ! So, vprp_beforeRF and SIdt_step are correlated 
+        ! from one time step to another.
+        ! Another problem is the Erf_minus - 
+        ! it is absent in this version.
+        ! 
+        ! iRFver=3 [the default version, as of 2019-01-31]
+        ! It is based on expressions of QL diffusion coefficients,
+        ! see [Stix_NF15_737_1975.pdf], also hand-written notes
+        ! RFkick_YuP180315_based_on_Xu_part3.pdf (and other parts).
+        ! The components of RF electric field are incorporated
+        ! through |theta_n,k|^2 as in Stix_NF_1975(after Eq.18).
+        ! Expression for |theta_n,k|^2 uses Jk(arg) Bessel functions
+        ! with arg==akperp_rho= Kperp*rho_larmor.
+        ! Presently, in AORSA-fields data files, there is no data on
+        ! Kperp, so in the code it is evaluated from Alfven speed;
+        ! see aKperp_alfven in orbit.f.
+        ! The change in Vperp^2 and Vpar from RF is set as
+        ! (for each given Nphi toroidal mode):
+        !   dvprp2_rf_Nphi= SQLperp*dtrf +RS05*sqrt(8*Dperp*vprp2*dtrf)
+        !   dvpar_rf_Nphi=  SQLpar*dtrf  +RS05*sqrt(2*Dpar*dtrf)
+        !    (dvpar_rf usually is much smaller than dvprp_rf) 
+        ! where SQLpar and SQLperp contain derivatives of QL diff.coeffs
+        ! over Vpar and Vperp
+        !(see RFkick_YuP180315_based_on_Xu_part3.pdf p.8-9, Eqs.10-11;  
+        ! Here in the code SQLperp = (-nu_s_perp * V^2) in the notes.)
+        ! Also, in the above, RS05= 2*sqrt(3)*(Rs-0.5) 
+        ! where Rs is a random number within [0;1) 
+        ! of the uniform distribution.
+        ! Note that there is one and the same random number 
+        ! in the above equations for the kick in Vpar and Vperp^2.
+        ! Note that the kick is applied for each Nphi mode
+        ! independently (independent random number)
+        ! This iRFver=3 version is fast -
+        ! tcpu is only 2x larger than in no-RF run.
+        ! [For more details, search "iRFver.eq.3" in orbit.f]
+
+      ! For iRFver=1:
+      nsubRF_min=10 !Lowest number of sub-steps within [t;t+DTorb]
+              ! (DTorb= orbit-integration step)
+              ! that can be used to compute the Stix integral SIdt
+      nsubRF_max=1000 !Max allowed number of sub-steps within [t;t+DTorb]
+              ! (DTorb= orbit-integration step)
+              ! that can be used to compute the Stix integral SIdt.
+              ! The actual number of steps "nsub" 
+              ! is determined automatically, see orbit.f:
+              ! nsub= nfract*(DTorb/tau_gyro)
+              ! The values nsubRF_min and nsubRF_max are used
+              ! to impose the lower and upper limits on value of nsub.
+                  
+      ! Additional features
+      [i_gyro_stix=0] !Not functional; For future possible use.
+      ! gyroradius correction:
+      ! if i_gyro_stix=1, calculate Larmor radius vector 
+      ! at each point of gc orbit, and evaluate rf field at actual
+      ! particle position.
+      ! i_gyro_stix=0  - rf field is evaluated at gc position.
+      
+      [n_phase=1] ! How many initial gyro-phases (for averaging; 
+                  ! reserved for future use)
+      
+      ! General setup for RF fields - reading data, rescaling, etc. 
+      fant= 78.d6 ! Antenna frequency [Hz]. 
+                  ! SHOULD MATCH AORSA (or TORIC) run/data file !!!
+
+      [Kflds= 2] 
+               ! For future possible use (comes from the DC code).
+               ! Here, the value of Kflds has no effect:
+               ! only rfEplus and rfEminus components are used.
+               ! Below, Kflds is checked and reset to 2
+               ! to be able to form Eplus and Eminus
+               ! from Er and Ez of the data file.
+               ! Future possible use:
+               ! Number of rf field components: k=1,Kflds. 
+               ! k=1:3->(Er,Ez,Ephi)rf,  k=4:6->(Br,Bz,Bphi)rf
+               ! To ignore Brf components, set Kflds=3 in input. 
+
+      ! For multiple toroidal modes, specify range of indices; 
+      ! For single mode, set them both to 1: 
+      nphi_index_start=1  ! careful: this is index, not Nphi value !
+      nphi_index_end=  1
+      nphi_index_step= 1  ! step (increment) in sum over nphi indices
+      ! If nphi_index_step is set to 0, it will be reset to 1 (default).
+      ! The values nphi_val(nphi_index) will be read from aorsa file.
+      ! Be sure that nphi_index_end does not exceed the number of modes in aorsa file!
+
+      ! For a single toroidal mode AORSA file (and for 'toric2' case), 
+      ! specify the value of n_phi:
+      n_phi=33 ! integer value of Nphi, with sign; 
+           ! Needed in case of RF_data_source='aorsa_single_nphi', 'toric2'
+           ! or 'toric'. 
+           ! No significance in case of 'aorsa_multiple_nphi', 
+           ! when nphi_val() are read from aorsa file
+ 
+      nphi_flip=-1 !Set to -1 if you want to flip the sign of nphi_val()
+           ! that are read from aorsa_flds_xyz.dat 
+           ! (in case of RF_data_source = 'aorsa_multiple_nphi')
+           ! In AORSA, PHI-angle is opposite to that in DC.
+ 
+      !Toric data/ only for 'toric' (but not 'toric2', which uses RF_pwr_scale):
+      Ant_cur=1. !Scales current flowing in antenna. 
+                 ! Input data from toric was for 1A.
+                 ! Power scales like Ant_cur**2
+ 
+      !AORSA any type of data, and also for 'toric2' case:
+      RF_pwr_scale=1.d0 ! RF field will be renorm-ed 
+                        ! by sqrtRF_pwr_scale=sqrt(RF_pwr_scale)
+
+      !YuP[2022-09-14] added:
+      rfon= 0.d0(default)   ![sec] Time when RF is started
+      rfoff=1.d100(default) ![sec] Time when RF is turned off
+      If reinjection of particles is enabled (reinject_nbi='enabled')
+      it is advised to set rfon to reinject_tau or larger,
+      because at t<reinject_tau  the distribution function
+      is not a steady-state slowing-down distribution yet.
+
+
+!=======================================================================
+!     SAVING DATA
+!=======================================================================
+   Some data can be written into NetCDF file, 
+   similar to CQL3D style - into mnemonic.nc.
+   Specify:
+      netcdfnm='enabled' (Default is 'disabled')
+   Presently [2023] these scalars and arrays are saved:
+   (see netcdfrw2.f for details)
+   'raxis', 'zaxis', 'xlimiter', 'ylimiter', 'nparts_tot',
+   'irbnd', 'ivbnd', 'iptchbnd', 'ptchbnd', 'vbnd', 
+   'radbnd', 'psibin', 'rho_sqpolflx', 'vdstb'
+   vdstb(iptchbnd,ivbnd,irbnd) is the distribution function
+   at the midplane, averaged over a time frame [tim_fdist_1;tim_fdist_2];
+   it is formed in subr. form_vdstb.
+   The distribution is accumulated at R-grid points radbnd(nradbin+1)
+   which correspond to radial bin boundaries.
+   (nradbin is the number of radial bins, equispaced on the equatorial
+   plane from the inner plasma radius to the outer plasma radius;
+   each particle in a given radial bin contributes to distribution functions
+   at two nearest boundaries).
+   
+   Also, the (R,Z) coordinates and velocity components (Vpar,Vper)
+   can be saved for all particles at the last step of integration.
+   To save them, use 
+      save_ptcl_list='enabled' (Default is 'disabled')
+   It is not advised to save them because the *.nc file 
+   may become very large.

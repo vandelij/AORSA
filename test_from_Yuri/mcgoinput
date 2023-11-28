@@ -1,0 +1,334 @@
+Test case for RFPP-2022, using dataset from TORIC.
+NSTX, f=30MHz, Nphi=-11 (clockwise; Bphi is also flipped to be clockwise).
+ZOW, using 2nd Maxw species to replace NBI (maxwell2=enabled), RF 
+ 
+ &input
+  mnemonic='NSTX_ZOW_Maxw2_RF000_dt05_taufrac1m4_10K_t10ms_r39m'  ! up to 256 char.
+  eqdskin='eqdsk_t217ms'  ! from N. Bertelli 2022-08-30. 
+  netcdfnm='enabled'
+  ! In MCGO, the directions of Btor and Itor can be changed by selection of signs
+  ! (bsgn is similar to btorsgn in DC)
+  bsgn=-1., ! +1 means in CCW dir., viewed from above 
+  ! bsgn=-1. sets Bphi clockwise (usual direction in AORSA). (The only option for RF)
+  csgn=-1., ! +1 means in CCW dir., viewed from above
+  ! With bsgn=+1 and csgn=+1, positive Vpar means co-current direction.
+  ! With bsgn=-1 and csgn=+1, positive Vpar means counter-current direction.
+  gc_integ='rkthree'  !'rktwodee' ! NEW fast OPTION: 'rkthree'
+  radcoord='sqpolflx' !'sqvol' !--------------[2023-04-04]
+  dtorbv_fact=0.5 !see DTorbv= dtorbv_fact*rplasma*0.01/max(v,vthi)
+  i_orb_width=0 !(=1 default, for FOW), or =0 for ZOW
+  iproblm=5,  !3= FREYA(no MAxw), 6=FREYA+Maxw
+              !5= Maxwellian distr. with Ti(test.ions) matching Ti(ibion below)
+  maxwell2='enabled' !To add NBI-equiv. Maxw. distr. (also, set ti2 and eni2)
+  inits=3, ! Means: use rini(1:abs(npart)), etc, for starting (only for iproblm=1)
+  enrgyini=62.0 51.3 51.3 62.0 ! starting energies [keV]  !(for iproblm=1)
+  rini=    1.20 1.20 1.20 1.20 !starting R (for iproblm=1)
+  zini=4*0.0 !(for iproblm=1) initial vertical position (m)
+  pini=4*0.0 !(for iproblm=1) initial toroidal angle (degrees)
+  zetini= -0.44 -0.161 0.161 0.44 !(for iproblm=1) initial pitch-angle cosine, v(par)/v
+  !corresp. to pitch(degree)= 116.10, 99.27, 80.73, 63.90
+  
+  !--- FOR FREYA:
+  iexcit=5 ! default is 0;  5 is ADAS
+  ranseed=1 ! set to value.ne.0 if you want repeatable results in each run
+  ! NEEDS CHECKING: ranseed has different usage in MCGO and CQL3D
+  !----- From cqlinput:
+  aheigh(1,1)=60.5  !From Deyong
+  alen(1,1)=  509.  !From Deyong
+  angleh(1)=  -21.715  !horizontal angle (degrees) between
+  !     optical axis and vertical plane corresponding to
+  !     each injector. zero value denotes perpendicular injection.
+  anglev(1)=0.0,
+  ashape(1,1)='s-rect',
+  awidth(1,1)=22.  !From Deyong
+  bhdiv(1)=0.4002, !From Deyong, 0.2830*sqrt(2.)=0.4002
+  bheigh(1)=43.,
+  bhfoc(1)=0.988e3,  !From Deyong
+  bhofset(1)=0.0,
+  bleni(1)=1.0e6,
+  blenp(1)=989.35,  !From Deyong
+  ! bmsprd=.1,         !----------- Not available in MCGO
+  bptor(1)=1.0e6 ! total power (watts) through aperature.
+  ! beamplse="enabled" !----------- Not available in MCGO
+  ! beampon=0.008      !----------- Not available in MCGO
+  ! beampoff=0.012     !----------- Not available in MCGO
+  bshape(1)='rect',
+  bvdiv(1)=1.102,  !From Deyong, 0.7792**sqrt(2.)=1.102
+  bvfoc(1)=0.988e3,
+  bvofset(1)=0.0,
+  bwidth(1)=12.,
+  ebkev(1)=65.0 ! maximum particle energy in source [keV]
+  ! Fraction of current at energy ebkev/ie, fbcur(ie,ib):
+  fbcur(1,1)=.474,   ! slight increase of full, for 65 keV, 
+  fbcur(2,1)=.370,   ! interpolating from Deyong
+  fbcur(3,1)=.156,
+  ! fr_gyro='enabled' !----------- Not available in MCGO
+  ! ibcur=1           !----------- Not available in MCGO
+  iborb=0,
+  ! inubpat=0,           !----------- Not used in MCGO
+  ! multiply='disabled', !----------- Not used in MCGO
+  naptr=1,
+  ! nbeams=1, !== mb in MCGO [number of neutral beam injectors (1 or 2)]
+  ! nfrplt=10000, !----------- Not used in MCGO
+  ! nimp=0,  ! Not a namelist in MCGO; set in sub.init, Line~1980
+  ! nprim=1, ! Not a namelist in MCGO; set in sub.init, Line~1980
+  ! [From MCGO printout: init_1987: nimp,nprim= 1, 1]
+  ! npart=250000, ! =npartin in MCGO, see above
+  npskip=1,
+  nsourc=1,
+  rpivot(1)=160.
+  sfrac1(1)=1.0,
+  ! smooth=.125, !----------- Not used in MCGO
+  zpivot(1)=0.0  
+  ! Extra settings for MCGO [inner and outer major R of vacuum vessel at horizontal
+  ! midplane (cm) ]
+  rin=  20. ! [cm] 
+  rout=154. ! little outside of rmin,rmax={20.9961891572371, 153.656733686506}
+  !--- done FREYA.
+  
+  !-- BACKGROUND SPECIES PROFILES ------------------------------------
+  !icenez=1, ! flag for density calculation logic  !=1 Specify ni1,ni2,...; derive zef and ne
+  !icenez=0, !input electron density and z-effective profiles.
+  !     calculate ion profiles (using average z
+  !     model). two or three ion species allowed.
+  !     if nion=3, NEED zfrac to determine the
+  !     first two (hydrogenic) species.
+  icenez=2, !Specify ne, ni for all ions except ibion. Find n_ibion from neutrality; find Zef
+  nion=3, !number of ion species. max=kion.
+  namei='d','h','c' !First species is hot-ion (test particles), other - background ions
+  ibion=1,   !index eni(*,ibion) for density profile of test-ion species
+  iprmion=1, !index eni(*,iprmion) for density profile of majority ion species
+  mf=100, !mf number of grid points, equispaced in delta(rho) upon which profiles are interpolated
+  
+  
+  !Te(rho=rte) profile [keV] (from 128741P10_profnt.dat, from N. Bertelli 2023-04-04)
+  !In TORIC rho is sqrt(pol.flux). Use radcoord='sqpolflx'
+  rte=0.000000000E+00 0.383798672E-01 0.767597343E-01 0.114905216E+00 0.152779611E+00
+ 0.190411770E+00 0.227738220E+00 0.264678668E+00 0.301157388E+00 0.337091932E+00
+ 0.372409421E+00 0.407096028E+00 0.441100008E+00 0.474404565E+00 0.506977522E+00
+ 0.538786423E+00 0.569803291E+00 0.599984745E+00 0.629297007E+00 0.657690878E+00
+ 0.685123440E+00 0.711547506E+00 0.736912352E+00 0.761182114E+00 0.784304157E+00
+ 0.806262457E+00 0.827011240E+00 0.846558805E+00 0.864874730E+00 0.881991009E+00
+ 0.897899091E+00 0.912649385E+00 0.926260357E+00 0.938788156E+00 0.950284711E+00
+ 0.960800816E+00 0.970378677E+00 0.979236523E+00 0.986849500E+00 0.993424750E+00
+ 0.100000000E+01 
+  te= 0.853888956E+00 0.852452555E+00 0.849102920E+00 0.844650417E+00 0.838591913E+00
+ 0.828654273E+00 0.812747871E+00 0.788376791E+00 0.752590859E+00 0.707796091E+00
+ 0.657996400E+00 0.605074877E+00 0.552516234E+00 0.503305572E+00 0.458165208E+00
+ 0.417310651E+00 0.380296015E+00 0.346097560E+00 0.314100821E+00 0.284137008E+00
+ 0.256102567E+00 0.230134759E+00 0.206234269E+00 0.184381293E+00 0.164600775E+00
+ 0.146830410E+00 0.130987733E+00 0.116919936E+00 0.104515510E+00 0.936512090E-01
+ 0.840985131E-01 0.757939152E-01 0.687434027E-01 0.630965930E-01 0.594321866E-01
+ 0.575755259E-01 0.561173840E-01 0.543197970E-01 0.513531768E-01 0.470936299E-01
+ 0.425648689E-01
+
+    
+  !--- Ion temp., Ti(rti) [keV] Assumed same for both ibion and iprmion
+  rti=0.000000000E+00 0.383798672E-01 0.767597343E-01 0.114905216E+00 0.152779611E+00
+ 0.190411770E+00 0.227738220E+00 0.264678668E+00 0.301157388E+00 0.337091932E+00
+ 0.372409421E+00 0.407096028E+00 0.441100008E+00 0.474404565E+00 0.506977522E+00
+ 0.538786423E+00 0.569803291E+00 0.599984745E+00 0.629297007E+00 0.657690878E+00
+ 0.685123440E+00 0.711547506E+00 0.736912352E+00 0.761182114E+00 0.784304157E+00
+ 0.806262457E+00 0.827011240E+00 0.846558805E+00 0.864874730E+00 0.881991009E+00
+ 0.897899091E+00 0.912649385E+00 0.926260357E+00 0.938788156E+00 0.950284711E+00
+ 0.960800816E+00 0.970378677E+00 0.979236523E+00 0.986849500E+00 0.993424750E+00
+ 0.100000000E+01 
+  ti= 0.953782678E+00 0.951559811E+00 0.946677058E+00 0.940898357E+00 0.933641175E+00
+ 0.922040758E+00 0.903336672E+00 0.873312984E+00 0.829155182E+00 0.772990194E+00
+ 0.704554188E+00 0.627200474E+00 0.547149099E+00 0.465883952E+00 0.385886341E+00
+ 0.313495660E+00 0.251579757E+00 0.200526850E+00 0.161619572E+00 0.132915914E+00
+ 0.113336348E+00 0.100543165E+00 0.912800854E-01 0.841715198E-01 0.772390678E-01
+ 0.698711994E-01 0.622839839E-01 0.544747847E-01 0.467513981E-01 0.395473596E-01
+ 0.328573124E-01 0.265411141E-01 0.205023247E-01 0.148226884E-01 0.991700881E-02
+ 0.655615452E-02 0.519502988E-02 0.500000000E-02 0.500000000E-02 0.500000000E-02
+ 0.500000000E-02
+
+
+! Additional Maxwellian (to simulate NBI)
+  ti2= 0.150668217E+02 0.149525297E+02 0.147123581E+02 0.144557659E+02 0.142313788E+02
+ 0.140971619E+02 0.140515614E+02 0.140485654E+02 0.140539985E+02 0.140614075E+02
+ 0.140664880E+02 0.140587483E+02 0.140311258E+02 0.139808576E+02 0.139262667E+02
+ 0.138926495E+02 0.138868804E+02 0.139276414E+02 0.140231652E+02 0.141777101E+02
+ 0.144047696E+02 0.147163126E+02 0.151174382E+02 0.156081336E+02 0.161872567E+02
+ 0.168670472E+02 0.176715433E+02 0.186359010E+02 0.197818489E+02 0.211045573E+02
+ 0.226220478E+02 0.243127973E+02 0.261184326E+02 0.280165958E+02 0.300348084E+02
+ 0.322547842E+02 0.345108050E+02 0.365049005E+02 0.379505707E+02 0.389262389E+02
+ 0.398103621E+02
+
+  
+  !--- ni1 (1st ion species in namei list). Set eni(*,1) over rni(*,1) radial grid
+  !Test ions (D) [ibion=1]    1/CM**3
+  rni(1,1)=0.000000000E+00 0.383798672E-01 0.767597343E-01 0.114905216E+00 0.152779611E+00
+ 0.190411770E+00 0.227738220E+00 0.264678668E+00 0.301157388E+00 0.337091932E+00
+ 0.372409421E+00 0.407096028E+00 0.441100008E+00 0.474404565E+00 0.506977522E+00
+ 0.538786423E+00 0.569803291E+00 0.599984745E+00 0.629297007E+00 0.657690878E+00
+ 0.685123440E+00 0.711547506E+00 0.736912352E+00 0.761182114E+00 0.784304157E+00
+ 0.806262457E+00 0.827011240E+00 0.846558805E+00 0.864874730E+00 0.881991009E+00
+ 0.897899091E+00 0.912649385E+00 0.926260357E+00 0.938788156E+00 0.950284711E+00
+ 0.960800816E+00 0.970378677E+00 0.979236523E+00 0.986849500E+00 0.993424750E+00
+ 0.100000000E+01
+  eni(1,1)= 0.232288497E+14 0.232351252E+14 0.232378181E+14 0.231992380E+14 0.230926030E+14
+ 0.228675992E+14 0.224863124E+14 0.219690385E+14 0.213217902E+14 0.205830195E+14
+ 0.198075985E+14 0.190108580E+14 0.182178889E+14 0.174574658E+14 0.167438162E+14
+ 0.160820893E+14 0.154709505E+14 0.148918867E+14 0.143249956E+14 0.137645414E+14
+ 0.132101057E+14 0.126652707E+14 0.121325685E+14 0.116122871E+14 0.110953793E+14
+ 0.105717608E+14 0.100259157E+14 0.945587202E+13 0.887938369E+13 0.830227611E+13
+ 0.773047882E+13 0.718733129E+13 0.668597398E+13 0.623378344E+13 0.583919393E+13
+ 0.549919763E+13 0.521899691E+13 0.500044569E+13 0.476719022E+13 0.447664610E+13
+ 0.417274308E+13
+!For icenez=2 n_ibion will be redefined from charge neutrality.
+
+  
+  !--- ni2 (2nd ion species in namei list). Set eni(*,2) over rni(*,2) radial grid
+  !From "NH         HYDROGEN ION DENSITY"
+  rni(1,2)=0.000000000E+00 0.383798672E-01 0.767597343E-01 0.114905216E+00 0.152779611E+00
+ 0.190411770E+00 0.227738220E+00 0.264678668E+00 0.301157388E+00 0.337091932E+00
+ 0.372409421E+00 0.407096028E+00 0.441100008E+00 0.474404565E+00 0.506977522E+00
+ 0.538786423E+00 0.569803291E+00 0.599984745E+00 0.629297007E+00 0.657690878E+00
+ 0.685123440E+00 0.711547506E+00 0.736912352E+00 0.761182114E+00 0.784304157E+00
+ 0.806262457E+00 0.827011240E+00 0.846558805E+00 0.864874730E+00 0.881991009E+00
+ 0.897899091E+00 0.912649385E+00 0.926260357E+00 0.938788156E+00 0.950284711E+00
+ 0.960800816E+00 0.970378677E+00 0.979236523E+00 0.986849500E+00 0.993424750E+00
+ 0.100000000E+01
+  eni(1,2)= 0.133546478E+13 0.134108178E+13 0.135703451E+13 0.138358432E+13 0.140867618E+13
+ 0.141663489E+13 0.140315306E+13 0.137416788E+13 0.134286371E+13 0.131372328E+13
+ 0.128517886E+13 0.125729677E+13 0.123689247E+13 0.122967301E+13 0.122779821E+13
+ 0.122361676E+13 0.121398289E+13 0.118465690E+13 0.112776994E+13 0.103767171E+13
+ 0.906315894E+12 0.720734564E+12 0.547432293E+12 0.478972288E+12 0.511880532E+12
+ 0.622228179E+12 0.715890997E+12 0.734867123E+12 0.719190171E+12 0.689776135E+12
+ 0.658350849E+12 0.627727734E+12 0.596526098E+12 0.563372127E+12 0.529364570E+12
+ 0.496317920E+12 0.467382070E+12 0.446614162E+12 0.428521094E+12 0.407522715E+12
+ 0.385691228E+12
+
+    
+  !--- ni3 (3rd ion species in namei list)
+  !From "NIMP       TOTAL IMPURITY DENSITY" == Ni_C in TORIC
+  rni(1,3)=0.000000000E+00 0.383798672E-01 0.767597343E-01 0.114905216E+00 0.152779611E+00
+ 0.190411770E+00 0.227738220E+00 0.264678668E+00 0.301157388E+00 0.337091932E+00
+ 0.372409421E+00 0.407096028E+00 0.441100008E+00 0.474404565E+00 0.506977522E+00
+ 0.538786423E+00 0.569803291E+00 0.599984745E+00 0.629297007E+00 0.657690878E+00
+ 0.685123440E+00 0.711547506E+00 0.736912352E+00 0.761182114E+00 0.784304157E+00
+ 0.806262457E+00 0.827011240E+00 0.846558805E+00 0.864874730E+00 0.881991009E+00
+ 0.897899091E+00 0.912649385E+00 0.926260357E+00 0.938788156E+00 0.950284711E+00
+ 0.960800816E+00 0.970378677E+00 0.979236523E+00 0.986849500E+00 0.993424750E+00
+ 0.100000000E+01
+  eni(1,3)= 0.141714935E+13 0.140886183E+13 0.137814330E+13 0.132292227E+13 0.126651625E+13
+ 0.122327576E+13 0.118588580E+13 0.115273472E+13 0.111375540E+13 0.105435798E+13
+ 0.980549272E+12 0.902612499E+12 0.815073460E+12 0.709486834E+12 0.598487207E+12
+ 0.500237669E+12 0.420612874E+12 0.379836913E+12 0.389449360E+12 0.457838472E+12
+ 0.598593642E+12 0.835678528E+12 0.105281410E+13 0.108847406E+13 0.946469725E+12
+ 0.667383619E+12 0.414487124E+12 0.287821491E+12 0.219370072E+12 0.174219958E+12
+ 0.135592992E+12 0.100150556E+12 0.704265534E+11 0.525448509E+11 0.471404433E+11
+ 0.495052731E+11 0.522808484E+11 0.512443641E+11 0.447064015E+11 0.332770375E+11
+ 0.208637154E+11
+
+    
+! Additional Maxwellian (to simulate NBI; Ni_D_beam in TORIC [cm^-3] )
+! This density is rescaled in subr.init to match eni1+eni2=eni(ibion)
+  eni2= 0.718014577E+12 0.721902316E+12 0.727058869E+12 0.725213188E+12 0.711770527E+12
+ 0.683447118E+12 0.641712781E+12 0.592913593E+12 0.542353986E+12 0.491104169E+12
+ 0.440335116E+12 0.392242434E+12 0.347719053E+12 0.306852895E+12 0.269891658E+12
+ 0.236330435E+12 0.205944130E+12 0.178346198E+12 0.152979381E+12 0.129598528E+12
+ 0.108082406E+12 0.886326507E+11 0.714420161E+11 0.566365215E+11 0.442784277E+11
+ 0.341219039E+11 0.259668887E+11 0.195154686E+11 0.144954074E+11 0.106734929E+11
+ 0.781428989E+10 0.573345526E+10 0.419218145E+10 0.305908746E+10 0.220487342E+10
+ 0.157645501E+10 0.114340765E+10 0.877090318E+09 0.621949698E+09 0.316851330E+09
+ 0.100000000E+05
+
+
+ !Electron density is computed from charge neutrality, don't specify
+ rne= 0.000000000E+00 0.383798672E-01 0.767597343E-01 0.114905216E+00 0.152779611E+00
+ 0.190411770E+00 0.227738220E+00 0.264678668E+00 0.301157388E+00 0.337091932E+00
+ 0.372409421E+00 0.407096028E+00 0.441100008E+00 0.474404565E+00 0.506977522E+00
+ 0.538786423E+00 0.569803291E+00 0.599984745E+00 0.629297007E+00 0.657690878E+00
+ 0.685123440E+00 0.711547506E+00 0.736912352E+00 0.761182114E+00 0.784304157E+00
+ 0.806262457E+00 0.827011240E+00 0.846558805E+00 0.864874730E+00 0.881991009E+00
+ 0.897899091E+00 0.912649385E+00 0.926260357E+00 0.938788156E+00 0.950284711E+00
+ 0.960800816E+00 0.970378677E+00 0.979236523E+00 0.986849500E+00 0.993424750E+00
+ 0.100000000E+01
+ ! ne [cm^-3]  from TORIC data
+ ene= 0.232288497E+14 0.232351252E+14 0.232378181E+14 0.231992380E+14 0.230926030E+14
+ 0.228675992E+14 0.224863124E+14 0.219690385E+14 0.213217902E+14 0.205830195E+14
+ 0.198075985E+14 0.190108580E+14 0.182178889E+14 0.174574658E+14 0.167438162E+14
+ 0.160820893E+14 0.154709505E+14 0.148918867E+14 0.143249956E+14 0.137645414E+14
+ 0.132101057E+14 0.126652707E+14 0.121325685E+14 0.116122871E+14 0.110953793E+14
+ 0.105717608E+14 0.100259157E+14 0.945587202E+13 0.887938369E+13 0.830227611E+13
+ 0.773047882E+13 0.718733129E+13 0.668597398E+13 0.623378344E+13 0.583919393E+13
+ 0.549919763E+13 0.521899691E+13 0.500044569E+13 0.476719022E+13 0.447664610E+13
+ 0.417274308E+13
+
+ !Zeff
+ rzef=   0.0,       0.50,      1.00,
+ zef=    3.0,       2.0,       1.22,
+ 
+ !--- neutrals [cm^-3]
+  rnn=    0.0,     0.6,    0.8,    0.9,    1.0,
+  enn=    1.e-03,  1.e-03, 1.e-03, 1.e-03, 1.e-03, ! Any Low value
+  
+  !Values in SOL:
+  teb1=   4.25e-2, !keV
+  tib1=   5.0e-3, !keV
+  eneb1=  4.17e12, !(cm**-3)! Not used when icenez=1 or 2, 
+  !Specify ion edge densities instead:
+  enib1(1)=3.9055E+12 !(cm**-3)  D
+  enib1(2)=4.1141E+11 !(cm**-3)  H
+  enib1(3)=3.2543E+10 !(cm**-3)  C
+  zeffb1= 1.22,
+  ennb1=  1.e-3 !neutral density in scrape-off region (cm**-3)
+  ! done SOL
+
+  npartin=0 !1000000, !input argument in freya()
+  npart=  1 !1000000  !npart ion trajectories are calculated [based on freya, can be changed by set_beam_parms(1)]
+  npart_maxw=10000  ! For Maxwellian group (if any) 
+  icoul=1, 
+  icoul1=1, !flag for model of coulomb collision induced speed diffusion
+  iscats=1, !set to 0 to skip pitch-angle scattering
+  fr_vthi_icoul0=1.d10 !No energy drag/diff above  v > fr_vthi_icoul0*vthi
+  ibres=0,  !ibres=1 to enable fast-ion/fast-neutral resonant charge exchange model
+  timeup=2.0,
+  timmax=0.010 !0.300!upper limit on trajectory time, after which integration is terminated (s).
+
+  accurc=1.0e-05 !1.e-7, !1.e-6 !1.e-5 !1.0e-04 (not used for 'rkthree')
+  tim_fdist_1=0.000 !0.100 !time window for fdist formation
+  tim_fdist_2=0.010 !0.300 !time window for fdist formation
+  ntw=4 !number of time windows for collecting of profiles (curdens, etc)
+  reinject_nbi='disabled' !
+  !reinject_tau=0.100  ![sec]
+  reinject_maxw='enabled' !
+  timstp=0.d0 !time interval between simulation of coll. effects during orbit integration. should be much less than the characteristic bounce time (s).
+  pin=1.0e06,
+  taufrac=1.e-4, !control for the artificial t step in collisions
+  gfactr=0.d0, !0.10, ! goosing factor for orbit speedup.
+  efrac=0.0 !only applied for NBI-born (N/A for iproblm=5)
+  emin=0.007 ! Lower energy limit for energy grid [keV] (only for plots)
+  emax=300. !Upper energy limit for energy grid [keV] (default is 73.5)
+  nradbin=19,
+  negrps=22,
+  intsave=1, !Interval for saving of time-dep. values, like energy(itime)
+  intorbsave=1, !Interval for saving of (rorbit,zorbit) along orbits
+  edistb= 0.50, 1.00, 5.00,10.00,15.00,20.00,23.33,25.00,30.00,35.00,40.00,
+         45.00,50.00,55.00,60.00,63.00,65.00,67.00,69.00,71.00,73.00,75.00,
+  nlbins=200 !100 !313
+
+  !------------ RF -----------------------------
+  iRFver=3 ! version of RF operator (3 is best; 1 is similar to DC-fast) 
+  RF_data_source='none' ! 'toric2' !'none' ! Read from 'toric2_data_rf.dat'
+ 
+  fant= 30.d6 ! Antenna frequency [Hz]. 
+              ! SHOULD MATCH AORSA or TORIC data file !!!  
+  ! For multiple toroidal modes, specify range of indices; 
+  ! For single mode, set them both to 1: 
+  nphi_index_start=1  ! careful: this is index, not Nphi value !
+  nphi_index_end=  1
+  nphi_index_step= 1  ! step (increment) in sum over nphi indices
+  !For Toric or AORSA data:
+  RF_pwr_scale=1.0 ! In data file, E-field is normalized to Prf=1MW
+  !(Example: To have Prf=10MW in MCGO run, use RF_pwr_scale=10.)
+  !(From transp.dat: 0.105E+07 TOTAL ICRF ANTENNA POWER  WATTS, i.e., 1.05MW)
+  n_phi=-11 !For 'toric2' or 'aorsa_single_nphi'; integer value of Nphi, with sign;
+  ! should be opposite to Nphi_aorsa (PHI in AORSA is CW)
+  nsubRF_max=6000 
+
+  rfon=0.0 ![sec] Time when RF starts
+
+ &end
