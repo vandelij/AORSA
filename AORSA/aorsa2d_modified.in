@@ -8,18 +8,18 @@
     nprow = 32
     npcol = 32
     lmax = 3
-    prfin = 2500000.0
-    freqcy = 80000000.0
+    prfin = 600000.0
+    freqcy = 96000000.0
     nstrap = 2
-    rant = 0.875
-    yant = 0.0
-    antlen = 0.32
+    rant = 1.084
+    yant = 0
+    antlen = 0.4
     xlt = 0.094
     wd = 0.244
     dpsiant0 = 0.025
-    antlc = 1.9
+    antlc = 5
     nphi_number = 1
-    nphi_array = 10
+    nphi_array = 5
     phase_array = 0.0, 180.0, 0.0, 180.0
     enorm_factor = 0.0
     nuper = 150
@@ -30,17 +30,18 @@
     damping = 100.0
     delta0 = 4e-05
     psilim = 0.999
-    ytop = 0.36
-    ybottom = -0.41
-    rwright = 0.91
+    ytop = 1.07
+    ybottom = -1.26
+    rwright = 2.317
+    rwleft = 1.022
     n_prof_flux = 1
     iprofile = 5
-    ndisti1 = 1
-    amu1 = 2.0
-    z1 = 1.0
-    ndisti2 = 1
-    amu2 = 1.0
-    z2 = 1.0
+    ndisti1 = 0
+    amu1 = 2
+    z1 = 1
+    ndisti2 = 0
+    amu2 = 2
+    z2 = 1
 /
 
 &state
