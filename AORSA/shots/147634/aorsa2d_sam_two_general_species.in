@@ -44,6 +44,7 @@
   ytop = 0.36
   ybottom = -0.41
   rwright = 0.91
+  rwleft = 0.4
   n_prof_flux = 1 !0 sqpolflx, 1 sqtorflx
   iprofile = 5 !use numerical profiles
 
