@@ -16,6 +16,7 @@
   prfin = 2.5e6 !launched power [W]
   freqcy = 80.0e6 !frequency [Hz]
   nstrap = 2 !number of straps
+  i_antenna = 0
   rant = 0.875 !location of the antenna in major radius R [m]
   yant = 0.0 !location of the antenna in height vs midplane Z [m]
   antlen = 0.32 !length of antenna straps [m]
@@ -31,6 +32,9 @@
   enorm_factor = 0.0 !0.0 forces cql3d and aorsa to use the same enorm
   nuper = 150 !number of parallel velocity space points used in 
   nupar = 300
+  use_new_wdot = .true.
+  nzeta_wdote = 51
+  nzeta_wdoti = 51 
 
   !noise control
   z2_electron = 1 !use Ztable interpolation to damp spectral noise

@@ -11,6 +11,7 @@
     prfin = 600000.0
     freqcy = 96000000.0
     nstrap = 2
+    i_antenna = 0
     rant = 1.084
     yant = 0
     antlen = 0.4
@@ -24,6 +25,9 @@
     enorm_factor = 0.0
     nuper = 150
     nupar = 300
+    use_new_wdot = .true.
+    nzeta_wdote = 51
+    nzeta_wdoti = 51
     z2_electron = 1
     upshift = 1
     xkperp_cutoff = 0.5
