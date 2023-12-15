@@ -10,7 +10,8 @@
   nmodesy = 128
   nprow = 32
   npcol = 32
-  lmax = 3 !highest order bessel function retained
+  lmax = 3 !highest order bessel function retained for ion conductivity
+  lmaxe = 1 !!highest order bessel function retained for e conductivity
 
   !antenna parameters
   prfin = 2.5e6 !launched power [W]
