@@ -7,12 +7,13 @@
     nmodesy = 128
     nprow = 32
     npcol = 32
-    lmax = 3
+    lmax = 9
+    lmaxe = 1
     prfin = 600000.0
     freqcy = 96000000.0
     nstrap = 2
     i_antenna = 0
-    rant = 1.084
+    rant = 1.12
     yant = 0
     antlen = 0.4
     xlt = 0.094
@@ -20,7 +21,7 @@
     dpsiant0 = 0.025
     antlc = 5
     nphi_number = 1
-    nphi_array = 5
+    nphi_array = -11
     phase_array = 0.0, 180.0, 0.0, 180.0
     enorm_factor = 0.0
     nuper = 150

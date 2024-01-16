@@ -21,7 +21,7 @@
     dpsiant0 = 0.025
     antlc = 5
     nphi_number = 1
-    nphi_array = 11
+    nphi_array = -11
     phase_array = 0.0, 180.0, 0.0, 180.0
     enorm_factor = 0.0
     nuper = 150
